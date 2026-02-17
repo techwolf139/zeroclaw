@@ -1,8 +1,52 @@
+# Rust build artifacts
 /target
 firmware/*/target
-*.db
-*.db-journal
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vim/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# ZeroClaw specific
 .wt-pr37/
 .env
 .worktrees/
+
+# Database
+*.db
+*.db-journal
+
+# Build outputs
+*.rlib
+*.a
+*.so
+*.dylib
+*.dll
+
+# Test outputs
+/tests/*/target
+*.profraw
+
+# Rustfmt
+rustfmt.toml
+
+# Clippy
+.clippy.toml
+
+# Cargo debug
+debug/
+incremental/
+
+# Firmware builds
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/**/*.hex
+firmware/**/*.uf2
