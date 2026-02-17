@@ -4,6 +4,13 @@ export struct Message {
     timestamp: string,
 }
 
+// Color Palette: Dark OLED Theme
+// Background: #0F172A (slate-900)
+// Surface: #1E293B (slate-800)
+// Accent: #22C55E (green-500)
+// Text: #F8FAFC (slate-50)
+// Muted: #64748B (slate-500)
+
 export component StatusBar inherits Rectangle {
     in property <string> status;
     in property <bool> connected;
@@ -12,24 +19,24 @@ export component StatusBar inherits Rectangle {
     
     callback clicked();
     
-    background: #16213e;
+    background: #1E293B;
     
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
+        padding-left: 10px;
+        padding-right: 10px;
         spacing: 8px;
         alignment: space-between;
         
         Text {
             text: "ZeroClaw";
-            color: #e94560;
-            font-size: 14px;
+            color: #22C55E;
+            font-size: 13px;
             font-weight: 600;
             vertical-alignment: center;
         }
         
         HorizontalLayout {
-            spacing: 6px;
+            spacing: 8px;
             alignment: end;
             
             Rectangle {
@@ -37,9 +44,9 @@ export component StatusBar inherits Rectangle {
                 height: 12px;
                 VerticalLayout {
                     spacing: 1px;
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 1 ? #00d9ff : #333; }
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 2 ? #00d9ff : #333; }
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 3 ? #00d9ff : #333; }
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 1 ? #22C55E : #334155; }
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 2 ? #22C55E : #334155; }
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 3 ? #22C55E : #334155; }
                 }
             }
             
@@ -47,17 +54,17 @@ export component StatusBar inherits Rectangle {
                 width: 8px;
                 height: 8px;
                 border-radius: 4px;
-                background: root.connected ? #00d9ff : #ff4757;
+                background: root.connected ? #22C55E : #EF4444;
             }
             
             TouchArea {
-                width: 20px;
+                width: 24px;
                 height: 20px;
                 clicked => { root.clicked(); }
                 Text {
-                    text: "[S]";
-                    color: #666;
-                    font-size: 12px;
+                    text: "[=]";
+                    color: #64748B;
+                    font-size: 11px;
                 }
             }
             
@@ -65,7 +72,7 @@ export component StatusBar inherits Rectangle {
                 width: 8px;
                 height: 8px;
                 border-radius: 4px;
-                background: #ff4757;
+                background: #F59E0B;
             }
         }
     }
@@ -74,7 +81,7 @@ export component StatusBar inherits Rectangle {
 export component MessageList inherits Rectangle {
     in property <[Message]> messages;
     
-    background: #1a1a2e;
+    background: #0F172A;
     
     VerticalLayout {
         spacing: 4px;
@@ -88,13 +95,13 @@ export component MessageList inherits Rectangle {
                 max-width: 240px;
                 min-height: 36px;
                 max-height: 60px;
-                background: msg.role == "user" ? #0f3460 : #16213e;
+                background: msg.role == "user" ? #334155 : #1E293B;
                 border-radius: 8px;
                 padding: 6px;
                 
                 Text {
                     text: msg.content;
-                    color: #eaeaea;
+                    color: #F8FAFC;
                     font-size: 11px;
                     wrap: word-wrap;
                 }
@@ -108,7 +115,7 @@ export component InputBar inherits Rectangle {
     
     callback on-send(string);
     
-    background: #16213e;
+    background: #1E293B;
     
     HorizontalLayout {
         padding: 4px;
@@ -136,7 +143,7 @@ export component InputBar inherits Rectangle {
                 }
             }
             Rectangle {
-                background: #e94560;
+                background: #EF4444;
                 border-radius: 4px;
                 Text {
                     text: "Send";
@@ -160,23 +167,23 @@ export component MenuOverlay inherits Rectangle {
     Rectangle {
         width: 280px;
         height: 200px;
-        background: #1a1a2e;
+        background: #0F172A;
         border-radius: 8px;
         border-width: 1px;
-        border-color: #333;
+        border-color: #334155;
         
         VerticalLayout {
             spacing: 0px;
             
             Rectangle {
                 height: 28px;
-                background: #16213e;
+                background: #1E293B;
                 HorizontalLayout {
                     padding: 4px;
                     alignment: space-between;
                     Text {
                         text: "[S] Settings";
-                        color: #eaeaea;
+                        color: #F8FAFC;
                         font-size: 12px;
                     }
                     TouchArea {
@@ -184,7 +191,7 @@ export component MenuOverlay inherits Rectangle {
                         clicked => { root.close(); }
                         Text {
                             text: "[X]";
-                            color: #e94560;
+                            color: #EF4444;
                             font-size: 12px;
                         }
                     }
@@ -198,12 +205,12 @@ export component MenuOverlay inherits Rectangle {
                     padding: 8px;
                     Text {
                         text: "Connection";
-                        color: #666;
+                        color: #64748B;
                         font-size: 10px;
                     }
                     Text {
                         text: "Server: " + root.server-url;
-                        color: #eaeaea;
+                        color: #F8FAFC;
                         font-size: 11px;
                     }
                     TouchArea {
@@ -211,7 +218,7 @@ export component MenuOverlay inherits Rectangle {
                         clicked => { root.reconnect(); }
                         Text {
                             text: "[C] Reconnect";
-                            color: #00d9ff;
+                            color: #22C55E;
                             font-size: 11px;
                         }
                     }
@@ -234,19 +241,19 @@ export component MenuOverlay inherits Rectangle {
                     padding: 6px;
                     Text {
                         text: "System";
-                        color: #666;
+                        color: #64748B;
                         font-size: 10px;
                     }
                     HorizontalLayout {
                         spacing: 8px;
                         Text {
                             text: "Model:";
-                            color: #888;
+                            color: #94A3B8;
                             font-size: 9px;
                         }
                         Text {
                             text: "claude-3.5";
-                            color: #eaeaea;
+                            color: #F8FAFC;
                             font-size: 9px;
                         }
                     }
@@ -254,12 +261,12 @@ export component MenuOverlay inherits Rectangle {
                         spacing: 8px;
                         Text {
                             text: "Provider:";
-                            color: #888;
+                            color: #94A3B8;
                             font-size: 9px;
                         }
                         Text {
                             text: "openrouter";
-                            color: #eaeaea;
+                            color: #F8FAFC;
                             font-size: 9px;
                         }
                     }
@@ -267,12 +274,12 @@ export component MenuOverlay inherits Rectangle {
                         spacing: 8px;
                         Text {
                             text: "Memory:";
-                            color: #888;
+                            color: #94A3B8;
                             font-size: 9px;
                         }
                         Text {
                             text: "128KB / 512KB";
-                            color: #00d9ff;
+                            color: #22C55E;
                             font-size: 9px;
                         }
                     }
@@ -286,17 +293,17 @@ export component MenuOverlay inherits Rectangle {
                     padding: 8px;
                     Text {
                         text: "About";
-                        color: #666;
+                        color: #64748B;
                         font-size: 10px;
                     }
                     Text {
                         text: "v0.1.0 | ZeroClaw ESP32";
-                        color: #eaeaea;
+                        color: #F8FAFC;
                         font-size: 11px;
                     }
                     Text {
                         text: "320x240 ST7789 Display";
-                        color: #666;
+                        color: #64748B;
                         font-size: 10px;
                     }
                 }
@@ -311,7 +318,7 @@ export component QuickActionBar inherits Rectangle {
     callback clicked-browser();
     callback clicked-settings();
     
-    background: #16213e;
+    background: #1E293B;
     
     HorizontalLayout {
         padding: 2px;
@@ -323,11 +330,11 @@ export component QuickActionBar inherits Rectangle {
             height: 20px;
             clicked => { root.clicked-memory(); }
             Rectangle {
-                background: #0f3460;
+                background: #334155;
                 border-radius: 4px;
                 Text {
                     text: "Memory";
-                    color: #00d9ff;
+                    color: #22C55E;
                     font-size: 10px;
                 }
             }
@@ -338,11 +345,11 @@ export component QuickActionBar inherits Rectangle {
             height: 20px;
             clicked => { root.clicked-files(); }
             Rectangle {
-                background: #0f3460;
+                background: #334155;
                 border-radius: 4px;
                 Text {
                     text: "LLM";
-                    color: #00d9ff;
+                    color: #22C55E;
                     font-size: 10px;
                 }
             }
@@ -353,11 +360,11 @@ export component QuickActionBar inherits Rectangle {
             height: 20px;
             clicked => { root.clicked-browser(); }
             Rectangle {
-                background: #0f3460;
+                background: #334155;
                 border-radius: 4px;
                 Text {
                     text: "Skill";
-                    color: #00d9ff;
+                    color: #22C55E;
                     font-size: 10px;
                 }
             }
@@ -368,11 +375,11 @@ export component QuickActionBar inherits Rectangle {
             height: 20px;
             clicked => { root.clicked-settings(); }
             Rectangle {
-                background: #0f3460;
+                background: #334155;
                 border-radius: 4px;
                 Text {
                     text: "Settings";
-                    color: #00d9ff;
+                    color: #22C55E;
                     font-size: 10px;
                 }
             }
@@ -383,14 +390,14 @@ export component QuickActionBar inherits Rectangle {
 export component MemoryOverlay inherits Rectangle {
     callback close();
     
-    background: #1a1a2e;
+    background: #0F172A;
     
     VerticalLayout {
         spacing: 0px;
         
         Rectangle {
             height: 28px;
-            background: #16213e;
+            background: #1E293B;
             HorizontalLayout {
                 padding: 4px;
                 spacing: 8px;
@@ -399,13 +406,13 @@ export component MemoryOverlay inherits Rectangle {
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 12px;
                     }
                 }
                 Text {
                     text: "Memory";
-                    color: #eaeaea;
+                    color: #F8FAFC;
                     font-size: 14px;
                 }
             }
@@ -417,18 +424,18 @@ export component MemoryOverlay inherits Rectangle {
             
             for i in 3: Rectangle {
                 min-height: 50px;
-                background: #16213e;
+                background: #1E293B;
                 border-radius: 4px;
                 padding: 6px;
                 VerticalLayout {
                     Text {
                         text: "Memory Entry " + (i + 1);
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 11px;
                     }
                     Text {
                         text: "Preview text...";
-                        color: #888;
+                        color: #94A3B8;
                         font-size: 10px;
                     }
                 }
@@ -440,14 +447,14 @@ export component MemoryOverlay inherits Rectangle {
 export component LLMOverlay inherits Rectangle {
     callback close();
     
-    background: #1a1a2e;
+    background: #0F172A;
     
     VerticalLayout {
         spacing: 0px;
         
         Rectangle {
             height: 28px;
-            background: #16213e;
+            background: #1E293B;
             HorizontalLayout {
                 padding: 4px;
                 spacing: 8px;
@@ -456,13 +463,13 @@ export component LLMOverlay inherits Rectangle {
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 12px;
                     }
                 }
                 Text {
                     text: "LLM Provider";
-                    color: #eaeaea;
+                    color: #F8FAFC;
                     font-size: 14px;
                 }
             }
@@ -474,25 +481,25 @@ export component LLMOverlay inherits Rectangle {
             
             Text {
                 text: "Select Provider:";
-                color: #666;
+                color: #64748B;
                 font-size: 10px;
             }
             
             for p in ["claude-3.5-sonnet", "gpt-4o", "gemini-pro"]: Rectangle {
                 min-height: 30px;
-                background: #16213e;
+                background: #1E293B;
                 border-radius: 4px;
                 padding: 6px;
                 HorizontalLayout {
                     spacing: 8px;
                     Text {
                         text: "[*]";
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 10px;
                     }
                     Text {
                         text: p;
-                        color: #eaeaea;
+                        color: #F8FAFC;
                         font-size: 11px;
                     }
                 }
@@ -504,14 +511,14 @@ export component LLMOverlay inherits Rectangle {
 export component SkillOverlay inherits Rectangle {
     callback close();
     
-    background: #1a1a2e;
+    background: #0F172A;
     
     VerticalLayout {
         spacing: 0px;
         
         Rectangle {
             height: 28px;
-            background: #16213e;
+            background: #1E293B;
             HorizontalLayout {
                 padding: 4px;
                 spacing: 8px;
@@ -520,13 +527,13 @@ export component SkillOverlay inherits Rectangle {
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 12px;
                     }
                 }
                 Text {
                     text: "Skills";
-                    color: #eaeaea;
+                    color: #F8FAFC;
                     font-size: 14px;
                 }
             }
@@ -538,25 +545,25 @@ export component SkillOverlay inherits Rectangle {
             
             Text {
                 text: "Enable Skills:";
-                color: #666;
+                color: #64748B;
                 font-size: 10px;
             }
             
             for s in ["Shell", "File", "Memory", "Browser", "Screenshot"]: Rectangle {
                 min-height: 24px;
-                background: #16213e;
+                background: #1E293B;
                 border-radius: 4px;
                 padding: 4px;
                 HorizontalLayout {
                     spacing: 8px;
                     Text {
                         text: "[+]";
-                        color: #00d9ff;
+                        color: #22C55E;
                         font-size: 10px;
                     }
                     Text {
                         text: s;
-                        color: #eaeaea;
+                        color: #F8FAFC;
                         font-size: 11px;
                     }
                 }
@@ -568,7 +575,7 @@ export component SkillOverlay inherits Rectangle {
 export component MainWindow inherits Window {
     width: 320px;
     height: 240px;
-    background: #1a1a2e;
+    background: #0F172A;
     
     in property <string> status-text: "Ready";
     in property <bool> is-connected: false;
