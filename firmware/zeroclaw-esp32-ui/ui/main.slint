@@ -1,0 +1,185 @@
+// ZeroClaw ESP32 UI - Main Interface
+// A conversational AI assistant interface optimized for 320x240 displays
+
+export component MainWindow inherits Window {
+    width: 320px;
+    height: 240px;
+    background: #1a1a2e;
+    
+    in property <string> status-text: "Ready";
+    in property <bool> is-connected: false;
+    in property <[Message]> messages: [];
+    in-out property <string> input-text: "";
+    
+    callback send-message(string);
+    callback scroll-up();
+    callback scroll-down();
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        // Status Bar
+        StatusBar {
+            status: root.status-text;
+            connected: root.is-connected;
+            height: 28px;
+        }
+        
+        // Message List
+        MessageList {
+            messages: root.messages;
+            height: 180px;
+        }
+        
+        // Input Area
+        InputBar {
+            text: input-text;
+            on-send(text) => { root.send-message(text); }
+            height: 32px;
+        }
+    }
+}
+
+// Message data structure
+export struct Message {
+    role: string,      // "user" | "assistant" | "system"
+    content: string,
+    timestamp: string,
+}
+
+// Status Bar Component
+component StatusBar inherits Rectangle {
+    in property <string> status;
+    in property <bool> connected;
+    
+    background: #16213e;
+    
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        alignment: space-between;
+        
+        Text {
+            text: "🦀 ZeroClaw";
+            color: #e94560;
+            font-size: 14px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: end;
+            
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: root.connected ? #00d9ff : #ff4757;
+            }
+            
+            Text {
+                text: root.status;
+                color: #eaeaea;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// Message List Component
+component MessageList inherits Rectangle {
+    in property <[Message]> messages;
+    
+    background: #1a1a2e;
+    
+    ListView {
+        for msg in root.messages: Rectangle {
+            height: msg.content.length > 40 ? 60px : 36px;
+            background: msg.role == "user" ? #0f3460 : #1a1a2e;
+            
+            HorizontalLayout {
+                padding: 8px;
+                spacing: 6px;
+                
+                Text {
+                    text: msg.role == "user" ? "👤" : "🤖";
+                    font-size: 14px;
+                    vertical-alignment: top;
+                }
+                
+                VerticalLayout {
+                    spacing: 2px;
+                    
+                    Text {
+                        text: msg.content;
+                        color: #eaeaea;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        overflow: elide;
+                    }
+                    
+                    Text {
+                        text: msg.timestamp;
+                        color: #666;
+                        font-size: 9px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Input Bar Component
+component InputBar inherits Rectangle {
+    in-out property <string> text;
+    
+    callback on-send(string);
+    
+    background: #16213e;
+    
+    HorizontalLayout {
+        padding: 4px;
+        spacing: 6px;
+        
+        input := LineEdit {
+            text <=> root.text;
+            placeholder-text: "Type message...";
+            font-size: 13px;
+            height: 24px;
+            
+            accepted(text) => {
+                if text != "" {
+                    root.on-send(text);
+                    root.text = "";
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 40px;
+            height: 24px;
+            
+            Rectangle {
+                background: #e94560;
+                border-radius: 4px;
+                
+                Text {
+                    text: "Send";
+                    color: white;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+            }
+            
+            clicked => {
+                if input.text != "" {
+                    root.on-send(input.text);
+                    root.text = "";
+                }
+            }
+        }
+    }
+}
