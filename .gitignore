@@ -4,4 +4,5 @@ firmware/*/target
 *.db-journal
 .DS_Store
 .wt-pr37/
+.worktrees/
 .env
