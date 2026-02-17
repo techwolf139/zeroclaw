@@ -21,6 +21,9 @@ Thumbs.db
 .wt-pr37/
 .env
 .worktrees/
+logs/
+docs/plans/
+BRANCH_PLAN.md
 
 # Database
 *.db
