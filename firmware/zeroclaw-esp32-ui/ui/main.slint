@@ -8,6 +8,7 @@ export component StatusBar inherits Rectangle {
     in property <string> status;
     in property <bool> connected;
     in property <int> wifi-signal;
+    in property <bool> has-notification: false;
     
     callback clicked();
     
@@ -58,6 +59,13 @@ export component StatusBar inherits Rectangle {
                     color: #666;
                     font-size: 12px;
                 }
+            }
+            
+            if root.has-notification: Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: #ff4757;
             }
         }
     }
@@ -575,6 +583,7 @@ export component MainWindow inherits Window {
     in property <bool> show-memory: false;
     in property <bool> show-files: false;
     in property <bool> show-browser: false;
+    in property <bool> has-notification: false;
     in property <int> wifi-signal: 0;
     in property <string> server-url: "http://192.168.1.100:8080";
     
@@ -600,6 +609,7 @@ export component MainWindow inherits Window {
             status: root.status-text;
             connected: root.is-connected;
             wifi-signal: root.wifi-signal;
+            has-notification: root.has-notification;
             height: 28px;
             clicked => { root.open-menu(); }
         }
