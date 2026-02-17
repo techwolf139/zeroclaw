@@ -222,6 +222,58 @@ export component MenuOverlay inherits Rectangle {
             Rectangle {
                 height: 60px;
                 VerticalLayout {
+                    spacing: 2px;
+                    padding: 6px;
+                    Text {
+                        text: "System";
+                        color: #666;
+                        font-size: 10px;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Model:";
+                            color: #888;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "claude-3.5";
+                            color: #eaeaea;
+                            font-size: 9px;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Provider:";
+                            color: #888;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "openrouter";
+                            color: #eaeaea;
+                            font-size: 9px;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Memory:";
+                            color: #888;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "128KB / 512KB";
+                            color: #00d9ff;
+                            font-size: 9px;
+                        }
+                    }
+                }
+            }
+            
+            Rectangle {
+                height: 60px;
+                VerticalLayout {
                     spacing: 4px;
                     padding: 8px;
                     Text {
