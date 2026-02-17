@@ -89,3 +89,11 @@ firmware/**/*.bin
 firmware/**/*.elf
 firmware/**/*.hex
 firmware/**/*.uf2
+
+# OS and IDE
+.DS_Store
+.env
+
+# Git worktrees
+.wt-pr37/
+.worktrees/
