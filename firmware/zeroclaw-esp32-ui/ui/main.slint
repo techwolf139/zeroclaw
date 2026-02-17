@@ -341,7 +341,7 @@ export component QuickActionBar inherits Rectangle {
                 background: #0f3460;
                 border-radius: 4px;
                 Text {
-                    text: "Files";
+                    text: "LLM";
                     color: #00d9ff;
                     font-size: 10px;
                 }
@@ -356,7 +356,7 @@ export component QuickActionBar inherits Rectangle {
                 background: #0f3460;
                 border-radius: 4px;
                 Text {
-                    text: "Browser";
+                    text: "Skill";
                     color: #00d9ff;
                     font-size: 10px;
                 }
@@ -437,7 +437,7 @@ export component MemoryOverlay inherits Rectangle {
     }
 }
 
-export component FilesOverlay inherits Rectangle {
+export component LLMOverlay inherits Rectangle {
     callback close();
     
     background: #1a1a2e;
@@ -461,65 +461,7 @@ export component FilesOverlay inherits Rectangle {
                     }
                 }
                 Text {
-                    text: "Files";
-                    color: #eaeaea;
-                    font-size: 14px;
-                }
-            }
-        }
-        
-        VerticalLayout {
-            spacing: 4px;
-            padding: 8px;
-            
-            for f in ["main.rs", "ui.slint", "Cargo.toml"]: Rectangle {
-                min-height: 30px;
-                background: #16213e;
-                border-radius: 4px;
-                padding: 6px;
-                HorizontalLayout {
-                    spacing: 8px;
-                    Text {
-                        text: "[F]";
-                        color: #e94560;
-                        font-size: 10px;
-                    }
-                    Text {
-                        text: f;
-                        color: #eaeaea;
-                        font-size: 11px;
-                    }
-                }
-            }
-        }
-    }
-}
-
-export component BrowserOverlay inherits Rectangle {
-    callback close();
-    
-    background: #1a1a2e;
-    
-    VerticalLayout {
-        spacing: 0px;
-        
-        Rectangle {
-            height: 28px;
-            background: #16213e;
-            HorizontalLayout {
-                padding: 4px;
-                spacing: 8px;
-                TouchArea {
-                    width: 30px;
-                    clicked => { root.close(); }
-                    Text {
-                        text: "[<]";
-                        color: #00d9ff;
-                        font-size: 12px;
-                    }
-                }
-                Text {
-                    text: "Browser";
+                    text: "LLM Provider";
                     color: #eaeaea;
                     font-size: 14px;
                 }
@@ -531,12 +473,76 @@ export component BrowserOverlay inherits Rectangle {
             padding: 8px;
             
             Text {
-                text: "Recent URLs";
+                text: "Select Provider:";
                 color: #666;
                 font-size: 10px;
             }
             
-            for url in ["google.com", "github.com", "rust-lang.org"]: Rectangle {
+            for p in ["claude-3.5-sonnet", "gpt-4o", "gemini-pro"]: Rectangle {
+                min-height: 30px;
+                background: #16213e;
+                border-radius: 4px;
+                padding: 6px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "[*]";
+                        color: #00d9ff;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: p;
+                        color: #eaeaea;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SkillOverlay inherits Rectangle {
+    callback close();
+    
+    background: #1a1a2e;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #16213e;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #00d9ff;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Skills";
+                    color: #eaeaea;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            Text {
+                text: "Enable Skills:";
+                color: #666;
+                font-size: 10px;
+            }
+            
+            for s in ["Shell", "File", "Memory", "Browser", "Screenshot"]: Rectangle {
                 min-height: 24px;
                 background: #16213e;
                 border-radius: 4px;
@@ -544,28 +550,15 @@ export component BrowserOverlay inherits Rectangle {
                 HorizontalLayout {
                     spacing: 8px;
                     Text {
-                        text: "[>]";
+                        text: "[+]";
                         color: #00d9ff;
                         font-size: 10px;
                     }
                     Text {
-                        text: url;
+                        text: s;
                         color: #eaeaea;
                         font-size: 11px;
                     }
-                }
-            }
-        }
-        
-        Rectangle {
-            height: 32px;
-            background: #16213e;
-            HorizontalLayout {
-                padding: 4px;
-                spacing: 4px;
-                TextInput {
-                    text: "";
-                    font-size: 11px;
                 }
             }
         }
@@ -582,7 +575,8 @@ export component MainWindow inherits Window {
     in property <bool> show-menu: false;
     in property <bool> show-memory: false;
     in property <bool> show-files: false;
-    in property <bool> show-browser: false;
+    in property <bool> show-llm: false;
+    in property <bool> show-skill: false;
     in property <bool> has-notification: false;
     in property <int> wifi-signal: 0;
     in property <string> server-url: "http://192.168.1.100:8080";
@@ -593,12 +587,12 @@ export component MainWindow inherits Window {
     callback send-message(string);
     callback open-menu();
     callback open-memory();
-    callback open-files();
-    callback open-browser();
+    callback open-llm();
+    callback open-skill();
     callback close-menu();
     callback close-memory();
-    callback close-files();
-    callback close-browser();
+    callback close-llm();
+    callback close-skill();
     callback reconnect();
     callback disconnect-wifi();
     
@@ -621,8 +615,8 @@ export component MainWindow inherits Window {
         
         QuickActionBar {
             clicked-memory => { root.open-memory(); }
-            clicked-files => { root.open-files(); }
-            clicked-browser => { root.open-browser(); }
+            clicked-files => { root.open-llm(); }
+            clicked-browser => { root.open-skill(); }
             clicked-settings => { root.open-menu(); }
             height: 24px;
         }
@@ -645,11 +639,11 @@ export component MainWindow inherits Window {
         close => { root.close-memory(); }
     }
     
-    if root.show-files: FilesOverlay {
-        close => { root.close-files(); }
+    if root.show-llm: LLMOverlay {
+        close => { root.close-llm(); }
     }
     
-    if root.show-browser: BrowserOverlay {
-        close => { root.close-browser(); }
+    if root.show-skill: SkillOverlay {
+        close => { root.close-skill(); }
     }
 }
