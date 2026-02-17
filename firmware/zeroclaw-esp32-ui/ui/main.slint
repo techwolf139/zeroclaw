@@ -245,6 +245,81 @@ export component MenuOverlay inherits Rectangle {
     }
 }
 
+export component QuickActionBar inherits Rectangle {
+    callback clicked-memory();
+    callback clicked-files();
+    callback clicked-browser();
+    callback clicked-settings();
+    
+    background: #16213e;
+    
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 4px;
+        alignment: space-around;
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-memory(); }
+            Rectangle {
+                background: #0f3460;
+                border-radius: 4px;
+                Text {
+                    text: "Memory";
+                    color: #00d9ff;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-files(); }
+            Rectangle {
+                background: #0f3460;
+                border-radius: 4px;
+                Text {
+                    text: "Files";
+                    color: #00d9ff;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-browser(); }
+            Rectangle {
+                background: #0f3460;
+                border-radius: 4px;
+                Text {
+                    text: "Browser";
+                    color: #00d9ff;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-settings(); }
+            Rectangle {
+                background: #0f3460;
+                border-radius: 4px;
+                Text {
+                    text: "Settings";
+                    color: #00d9ff;
+                    font-size: 10px;
+                }
+            }
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     width: 320px;
     height: 240px;
@@ -261,6 +336,9 @@ export component MainWindow inherits Window {
     
     callback send-message(string);
     callback open-menu();
+    callback open-memory();
+    callback open-files();
+    callback open-browser();
     callback close-menu();
     callback reconnect();
     callback disconnect-wifi();
@@ -278,7 +356,15 @@ export component MainWindow inherits Window {
         
         MessageList {
             messages: root.messages;
-            height: 180px;
+            height: 150px;
+        }
+        
+        QuickActionBar {
+            clicked-memory => { root.open-memory(); }
+            clicked-files => { root.open-files(); }
+            clicked-browser => { root.open-browser(); }
+            clicked-settings => { root.open-menu(); }
+            height: 24px;
         }
         
         InputBar {
