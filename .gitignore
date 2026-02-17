@@ -53,6 +53,9 @@ BRANCH_PLAN.md
 # Logs
 logs/
 .worktrees/
+logs/
+docs/plans/
+BRANCH_PLAN.md
 
 # Database
 *.db
