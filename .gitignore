@@ -1,7 +1,9 @@
 # Rust build artifacts
 /target
 firmware/*/target
-Cargo.lock
+firmware/*/rust-toolchain.toml
+firmware/*/rust-toolchain.toml
+# Note: Cargo.lock in firmware/ is tracked for reproducible builds
 
 # IDE
 .idea/
