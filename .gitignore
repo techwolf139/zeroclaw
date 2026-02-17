@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target
+*/target
 firmware/*/target
 firmware/*/rust-toolchain.toml
 firmware/*/rust-toolchain.toml
@@ -24,6 +25,7 @@ Thumbs.db
 logs/
 docs/plans/
 BRANCH_PLAN.md
+zeroclaw-ui-demo/
 
 # Database
 *.db
