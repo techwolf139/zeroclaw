@@ -320,6 +320,198 @@ export component QuickActionBar inherits Rectangle {
     }
 }
 
+export component MemoryOverlay inherits Rectangle {
+    callback close();
+    
+    background: #1a1a2e;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #16213e;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #00d9ff;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Memory";
+                    color: #eaeaea;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            for i in 3: Rectangle {
+                min-height: 50px;
+                background: #16213e;
+                border-radius: 4px;
+                padding: 6px;
+                VerticalLayout {
+                    Text {
+                        text: "Memory Entry " + (i + 1);
+                        color: #00d9ff;
+                        font-size: 11px;
+                    }
+                    Text {
+                        text: "Preview text...";
+                        color: #888;
+                        font-size: 10px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component FilesOverlay inherits Rectangle {
+    callback close();
+    
+    background: #1a1a2e;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #16213e;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #00d9ff;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Files";
+                    color: #eaeaea;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            for f in ["main.rs", "ui.slint", "Cargo.toml"]: Rectangle {
+                min-height: 30px;
+                background: #16213e;
+                border-radius: 4px;
+                padding: 6px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "[F]";
+                        color: #e94560;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: f;
+                        color: #eaeaea;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component BrowserOverlay inherits Rectangle {
+    callback close();
+    
+    background: #1a1a2e;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #16213e;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #00d9ff;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Browser";
+                    color: #eaeaea;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            Text {
+                text: "Recent URLs";
+                color: #666;
+                font-size: 10px;
+            }
+            
+            for url in ["google.com", "github.com", "rust-lang.org"]: Rectangle {
+                min-height: 24px;
+                background: #16213e;
+                border-radius: 4px;
+                padding: 4px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "[>]";
+                        color: #00d9ff;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: url;
+                        color: #eaeaea;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+        
+        Rectangle {
+            height: 32px;
+            background: #16213e;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 4px;
+                TextInput {
+                    text: "";
+                    font-size: 11px;
+                }
+            }
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     width: 320px;
     height: 240px;
@@ -328,6 +520,9 @@ export component MainWindow inherits Window {
     in property <string> status-text: "Ready";
     in property <bool> is-connected: false;
     in property <bool> show-menu: false;
+    in property <bool> show-memory: false;
+    in property <bool> show-files: false;
+    in property <bool> show-browser: false;
     in property <int> wifi-signal: 0;
     in property <string> server-url: "http://192.168.1.100:8080";
     
@@ -340,6 +535,9 @@ export component MainWindow inherits Window {
     callback open-files();
     callback open-browser();
     callback close-menu();
+    callback close-memory();
+    callback close-files();
+    callback close-browser();
     callback reconnect();
     callback disconnect-wifi();
     
@@ -379,5 +577,17 @@ export component MainWindow inherits Window {
         server-url: root.server-url;
         reconnect => { root.reconnect(); }
         disconnect => { root.disconnect-wifi(); }
+    }
+    
+    if root.show-memory: MemoryOverlay {
+        close => { root.close-memory(); }
+    }
+    
+    if root.show-files: FilesOverlay {
+        close => { root.close-files(); }
+    }
+    
+    if root.show-browser: BrowserOverlay {
+        close => { root.close-browser(); }
     }
 }
