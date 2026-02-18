@@ -454,7 +454,7 @@ async fn handle_v1_memories_list(
 ) -> impl IntoResponse {
     let limit = query.limit.unwrap_or(10);
     let entries = if let Some(q) = query.query {
-        match state.mem.recall(&q, limit).await {
+        match state.mem.recall(&q, limit, None).await {
             Ok(entries) => entries,
             Err(e) => {
                 return (
@@ -464,7 +464,7 @@ async fn handle_v1_memories_list(
             }
         }
     } else {
-        match state.mem.list(None).await {
+        match state.mem.list(None, None).await {
             Ok(entries) => entries,
             Err(e) => {
                 return (
@@ -490,7 +490,7 @@ async fn handle_v1_memories_create(
         "conversation" => MemoryCategory::Conversation,
         _ => MemoryCategory::Custom(req.category.clone()),
     };
-    if let Err(e) = state.mem.store(&req.key, &req.content, category).await {
+    if let Err(e) = state.mem.store(&req.key, &req.content, category, None).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -684,7 +684,7 @@ async fn handle_v1_tools_execute(
                     "daily" => MemoryCategory::Daily,
                     _ => MemoryCategory::Custom(category.to_string()),
                 };
-                match state.mem.store(key, content, cat).await {
+                match state.mem.store(key, content, cat, None).await {
                     Ok(_) => Ok(format!("Stored: {}", key)),
                     Err(e) => Err(e.to_string()),
                 }
@@ -699,7 +699,7 @@ async fn handle_v1_tools_execute(
                     .get("limit")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(5) as usize;
-                match state.mem.recall(query, limit).await {
+                match state.mem.recall(query, limit, None).await {
                     Ok(entries) => {
                         let results: Vec<String> = entries
                             .iter()
@@ -820,8 +820,10 @@ async fn handle_v1_channels_send(
     match channel_name.as_str() {
         "cli" => {
             use crate::channels::cli::CliChannel;
+            use crate::channels::traits::SendMessage;
             let channel = CliChannel::new();
-            match channel.send(&req.recipient, &req.message).await {
+            let msg = SendMessage::new(&req.message, &req.recipient);
+            match channel.send(&msg).await {
                 Ok(_) => {
                     let resp = ChannelSendResponse {
                         sent: true,
@@ -1534,6 +1536,132 @@ mod tests {
         assert_eq!(provider_impl.calls.load(Ordering::SeqCst), 2);
     }
 
+    #[test]
+    fn webhook_secret_hash_is_deterministic_and_nonempty() {
+        let one = hash_webhook_secret("secret-value");
+        let two = hash_webhook_secret("secret-value");
+        let other = hash_webhook_secret("other-value");
+
+        assert_eq!(one, two);
+        assert_ne!(one, other);
+        assert_eq!(one.len(), 64);
+    }
+
+    #[tokio::test]
+    async fn webhook_secret_hash_rejects_missing_header() {
+        let provider_impl = Arc::new(MockProvider::default());
+        let provider: Arc<dyn Provider> = provider_impl.clone();
+        let memory: Arc<dyn Memory> = Arc::new(MockMemory);
+
+        let state = AppState {
+            config: Arc::new(Mutex::new(Config::default())),
+            provider,
+            model: "test-model".into(),
+            temperature: 0.0,
+            mem: memory,
+            auto_save: false,
+            webhook_secret_hash: Some(Arc::from(hash_webhook_secret("super-secret"))),
+            pairing: Arc::new(PairingGuard::new(false, &[])),
+            rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100)),
+            idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
+            whatsapp: None,
+            whatsapp_app_secret: None,
+            service_startup: Instant::now(),
+        };
+
+        let response = handle_webhook(
+            State(state),
+            HeaderMap::new(),
+            Ok(Json(WebhookBody {
+                message: "hello".into(),
+            })),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(provider_impl.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn webhook_secret_hash_rejects_invalid_header() {
+        let provider_impl = Arc::new(MockProvider::default());
+        let provider: Arc<dyn Provider> = provider_impl.clone();
+        let memory: Arc<dyn Memory> = Arc::new(MockMemory);
+
+        let state = AppState {
+            config: Arc::new(Mutex::new(Config::default())),
+            provider,
+            model: "test-model".into(),
+            temperature: 0.0,
+            mem: memory,
+            auto_save: false,
+            webhook_secret_hash: Some(Arc::from(hash_webhook_secret("super-secret"))),
+            pairing: Arc::new(PairingGuard::new(false, &[])),
+            rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100)),
+            idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
+            whatsapp: None,
+            whatsapp_app_secret: None,
+            service_startup: Instant::now(),
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Webhook-Secret", HeaderValue::from_static("wrong-secret"));
+
+        let response = handle_webhook(
+            State(state),
+            headers,
+            Ok(Json(WebhookBody {
+                message: "hello".into(),
+            })),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(provider_impl.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn webhook_secret_hash_accepts_valid_header() {
+        let provider_impl = Arc::new(MockProvider::default());
+        let provider: Arc<dyn Provider> = provider_impl.clone();
+        let memory: Arc<dyn Memory> = Arc::new(MockMemory);
+
+        let state = AppState {
+            config: Arc::new(Mutex::new(Config::default())),
+            provider,
+            model: "test-model".into(),
+            temperature: 0.0,
+            mem: memory,
+            auto_save: false,
+            webhook_secret_hash: Some(Arc::from(hash_webhook_secret("super-secret"))),
+            pairing: Arc::new(PairingGuard::new(false, &[])),
+            rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100)),
+            idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
+            whatsapp: None,
+            whatsapp_app_secret: None,
+            service_startup: Instant::now(),
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-Webhook-Secret", HeaderValue::from_static("super-secret"));
+
+        let response = handle_webhook(
+            State(state),
+            headers,
+            Ok(Json(WebhookBody {
+                message: "hello".into(),
+            })),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(provider_impl.calls.load(Ordering::SeqCst), 1);
+    }
+
+>>>>>>> f21311b (fix: resolve merge conflicts in gateway (service_startup, SendMessage, Memory trait))
     // ══════════════════════════════════════════════════════════
     // WhatsApp Signature Verification Tests (CWE-345 Prevention)
     // ══════════════════════════════════════════════════════════
