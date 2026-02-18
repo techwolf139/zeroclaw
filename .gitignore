@@ -1,8 +1,23 @@
+# Rust build artifacts
 /target
+*/target
 firmware/*/target
-*.db
-*.db-journal
+firmware/*/rust-toolchain.toml
+# Note: Cargo.lock in firmware/ is tracked for reproducible builds
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vim/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# ZeroClaw specific
 .wt-pr37/
 __pycache__/
 *.pyc
@@ -12,12 +27,10 @@ docker-compose.override.yml
 .env
 
 # Python virtual environments
-
 .venv/
 venv/
 
 # ESP32 build cache (esp-idf-sys managed)
-
 .embuild/
 .env.local
 .env.*.local
@@ -34,5 +47,38 @@ zeroclaw-ui-demo/target/
 # Branch planning
 BRANCH_PLAN.md
 
-# Logs
+# Worktrees
+.worktrees/
 logs/
+docs/plans/
+
+# Database
+*.db
+*.db-journal
+
+# Build outputs
+*.rlib
+*.a
+*.so
+*.dylib
+*.dll
+
+# Test outputs
+/tests/*/target
+*.profraw
+
+# Rustfmt
+rustfmt.toml
+
+# Clippy
+.clippy.toml
+
+# Cargo debug
+debug/
+incremental/
+
+# Firmware builds
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/**/*.hex
+firmware/**/*.uf2
