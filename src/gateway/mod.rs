@@ -19,10 +19,10 @@ use crate::util::truncate_with_ellipsis;
 use anyhow::{Context, Result};
 use axum::{
     body::Bytes,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Json},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use parking_lot::Mutex;
@@ -190,6 +190,8 @@ pub struct AppState {
     pub whatsapp: Option<Arc<WhatsAppChannel>>,
     /// `WhatsApp` app secret for webhook signature verification (`X-Hub-Signature-256`)
     pub whatsapp_app_secret: Option<Arc<str>>,
+    /// Service startup time for /v1/stats endpoint
+    pub service_startup: Instant,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -369,6 +371,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         idempotency_store,
         whatsapp: whatsapp_channel,
         whatsapp_app_secret,
+        service_startup: Instant::now(),
     };
 
     // Build router with middleware
@@ -378,6 +381,16 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/webhook", post(handle_webhook))
         .route("/whatsapp", get(handle_whatsapp_verify))
         .route("/whatsapp", post(handle_whatsapp_message))
+        .route("/v1/stats", get(handle_v1_stats))
+        .route("/v1/models", get(handle_v1_models))
+        .route("/v1/memories", get(handle_v1_memories_list))
+        .route("/v1/memories", post(handle_v1_memories_create))
+        .route("/v1/memories/:key", get(handle_v1_memory_get))
+        .route("/v1/memories/:key", delete(handle_v1_memory_delete))
+        .route("/v1/chat", post(handle_v1_chat))
+        .route("/v1/tools/execute", post(handle_v1_tools_execute))
+        .route("/v1/channels", get(handle_v1_channels_list))
+        .route("/v1/channels/:name/send", post(handle_v1_channels_send))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
@@ -403,6 +416,478 @@ async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
         "runtime": crate::health::snapshot_json(),
     });
     Json(body)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE API V1 HANDLERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[derive(serde::Deserialize)]
+struct MemoryQuery {
+    query: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(serde::Deserialize)]
+struct MemoryCreateRequest {
+    key: String,
+    content: String,
+    #[serde(default = "default_category")]
+    category: String,
+}
+
+fn default_category() -> String {
+    "conversation".to_string()
+}
+
+#[derive(serde::Serialize)]
+struct MemoryResponse {
+    id: String,
+    key: String,
+    content: String,
+    category: String,
+    timestamp: String,
+}
+
+impl From<crate::memory::MemoryEntry> for MemoryResponse {
+    fn from(entry: crate::memory::MemoryEntry) -> Self {
+        Self {
+            id: entry.id,
+            key: entry.key,
+            content: entry.content,
+            category: entry.category.to_string(),
+            timestamp: entry.timestamp,
+        }
+    }
+}
+
+/// GET /v1/stats — service statistics
+async fn handle_v1_stats(State(state): State<AppState>) -> impl IntoResponse {
+    let uptime = state.service_startup.elapsed().as_secs();
+    let body = serde_json::json!({
+        "uptime_seconds": uptime,
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+    (StatusCode::OK, Json(body))
+}
+
+/// GET /v1/models — list available models
+async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
+    let models = vec![
+        state.model.clone(),
+        "claude-sonnet-4-20250514".to_string(),
+        "gpt-4o".to_string(),
+    ];
+    let body = serde_json::json!({
+        "models": models,
+    });
+    (StatusCode::OK, Json(body))
+}
+
+/// GET /v1/memories — list memories
+async fn handle_v1_memories_list(
+    State(state): State<AppState>,
+    Query(query): Query<MemoryQuery>,
+) -> impl IntoResponse {
+    let limit = query.limit.unwrap_or(10);
+    let entries = if let Some(q) = query.query {
+        match state.mem.recall(&q, limit).await {
+            Ok(entries) => entries,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                );
+            }
+        }
+    } else {
+        match state.mem.list(None).await {
+            Ok(entries) => entries,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                );
+            }
+        }
+    };
+    let memories: Vec<MemoryResponse> = entries.into_iter().map(MemoryResponse::from).collect();
+    let body = serde_json::to_value(&memories).unwrap_or(serde_json::Value::Null);
+    (StatusCode::OK, Json(body))
+}
+
+/// POST /v1/memories — create memory
+async fn handle_v1_memories_create(
+    State(state): State<AppState>,
+    Json(req): Json<MemoryCreateRequest>,
+) -> impl IntoResponse {
+    let category = match req.category.as_str() {
+        "core" => MemoryCategory::Core,
+        "daily" => MemoryCategory::Daily,
+        "conversation" => MemoryCategory::Conversation,
+        _ => MemoryCategory::Custom(req.category.clone()),
+    };
+    if let Err(e) = state.mem.store(&req.key, &req.content, category).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        );
+    }
+    match state.mem.get(&req.key).await {
+        Ok(Some(entry)) => {
+            let mem_resp = MemoryResponse::from(entry);
+            let body = serde_json::to_value(&mem_resp).unwrap_or(serde_json::Value::Null);
+            (StatusCode::CREATED, Json(body))
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Memory not found after creation" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// GET /v1/memories/:key — get memory
+async fn handle_v1_memory_get(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> impl IntoResponse {
+    match state.mem.get(&key).await {
+        Ok(Some(entry)) => {
+            let mem_resp = MemoryResponse::from(entry);
+            let body = serde_json::to_value(&mem_resp).unwrap_or(serde_json::Value::Null);
+            (StatusCode::OK, Json(body))
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Memory not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// DELETE /v1/memories/:key — delete memory
+async fn handle_v1_memory_delete(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> impl IntoResponse {
+    match state.mem.forget(&key).await {
+        Ok(true) => (StatusCode::OK, Json(serde_json::json!({ "deleted": true }))),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Memory not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V1 CHAT API
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[derive(serde::Deserialize)]
+struct ChatRequest {
+    message: String,
+    model: Option<String>,
+    temperature: Option<f64>,
+}
+
+#[derive(serde::Serialize)]
+struct ChatResponse {
+    response: String,
+    model: String,
+}
+
+/// POST /v1/chat — chat with AI
+async fn handle_v1_chat(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ChatRequest>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"})),
+            );
+        }
+    }
+
+    let model = req.model.unwrap_or(state.model.clone());
+    let temp = req.temperature.unwrap_or(state.temperature);
+
+    match state.provider.simple_chat(&req.message, &model, temp).await {
+        Ok(response) => {
+            let resp = ChatResponse { response, model };
+            let body = serde_json::to_value(&resp).unwrap_or(serde_json::Value::Null);
+            (StatusCode::OK, Json(body))
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        ),
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V1 TOOLS API
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[derive(serde::Deserialize)]
+struct ToolExecuteRequest {
+    tool: String,
+    params: serde_json::Value,
+}
+
+#[derive(serde::Serialize)]
+struct ToolExecuteResponse {
+    success: bool,
+    result: String,
+    tool: String,
+}
+
+/// POST /v1/tools/execute — execute a tool
+async fn handle_v1_tools_execute(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ToolExecuteRequest>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"})),
+            );
+        }
+    }
+
+    let tool_name = req.tool.to_lowercase();
+    let result = match tool_name.as_str() {
+        "shell" | "bash" => {
+            if let Some(cmd) = req.params.get("command").and_then(|v| v.as_str()) {
+                execute_shell(cmd).await
+            } else {
+                Err("Missing 'command' parameter".to_string())
+            }
+        }
+        "file_read" | "read" => {
+            if let Some(path) = req.params.get("path").and_then(|v| v.as_str()) {
+                execute_file_read(path).await
+            } else {
+                Err("Missing 'path' parameter".to_string())
+            }
+        }
+        "file_write" | "write" => {
+            if let (Some(path), Some(content)) = (
+                req.params.get("path").and_then(|v| v.as_str()),
+                req.params.get("content").and_then(|v| v.as_str()),
+            ) {
+                execute_file_write(path, content).await
+            } else {
+                Err("Missing 'path' or 'content' parameter".to_string())
+            }
+        }
+        "memory_store" => {
+            if let (Some(key), Some(content)) = (
+                req.params.get("key").and_then(|v| v.as_str()),
+                req.params.get("content").and_then(|v| v.as_str()),
+            ) {
+                let category = req
+                    .params
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("conversation");
+                let cat = match category {
+                    "core" => MemoryCategory::Core,
+                    "daily" => MemoryCategory::Daily,
+                    _ => MemoryCategory::Custom(category.to_string()),
+                };
+                match state.mem.store(key, content, cat).await {
+                    Ok(_) => Ok(format!("Stored: {}", key)),
+                    Err(e) => Err(e.to_string()),
+                }
+            } else {
+                Err("Missing 'key' or 'content' parameter".to_string())
+            }
+        }
+        "memory_recall" | "recall" => {
+            if let Some(query) = req.params.get("query").and_then(|v| v.as_str()) {
+                let limit = req
+                    .params
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+                match state.mem.recall(query, limit).await {
+                    Ok(entries) => {
+                        let results: Vec<String> = entries
+                            .iter()
+                            .map(|e| format!("[{}] {}", e.key, e.content))
+                            .collect();
+                        Ok(results.join("\n---\n"))
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
+            } else {
+                Err("Missing 'query' parameter".to_string())
+            }
+        }
+        "memory_forget" | "forget" => {
+            if let Some(key) = req.params.get("key").and_then(|v| v.as_str()) {
+                match state.mem.forget(key).await {
+                    Ok(true) => Ok(format!("Deleted: {}", key)),
+                    Ok(false) => Err(format!("Not found: {}", key)),
+                    Err(e) => Err(e.to_string()),
+                }
+            } else {
+                Err("Missing 'key' parameter".to_string())
+            }
+        }
+        _ => Err(format!("Unknown tool: {}", tool_name)),
+    };
+
+    match result {
+        Ok(output) => {
+            let resp = ToolExecuteResponse {
+                success: true,
+                result: output,
+                tool: tool_name,
+            };
+            let body = serde_json::to_value(&resp).unwrap_or(serde_json::Value::Null);
+            (StatusCode::OK, Json(body))
+        }
+        Err(e) => {
+            let resp = ToolExecuteResponse {
+                success: false,
+                result: e,
+                tool: tool_name,
+            };
+            let body = serde_json::to_value(&resp).unwrap_or(serde_json::Value::Null);
+            (StatusCode::BAD_REQUEST, Json(body))
+        }
+    }
+}
+
+async fn execute_shell(command: &str) -> Result<String, String> {
+    use std::process::Command;
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(format!("{}\n{}", stdout, stderr))
+    }
+}
+
+async fn execute_file_read(path: &str) -> Result<String, String> {
+    tokio::fs::read_to_string(path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn execute_file_write(path: &str, content: &str) -> Result<String, String> {
+    tokio::fs::write(path, content)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(format!("Written to: {}", path))
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V1 CHANNELS API
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[derive(serde::Deserialize)]
+struct ChannelSendRequest {
+    recipient: String,
+    message: String,
+}
+
+#[derive(serde::Serialize)]
+struct ChannelSendResponse {
+    sent: bool,
+    channel: String,
+    recipient: String,
+}
+
+/// POST /v1/channels/:name/send — send message via channel
+async fn handle_v1_channels_send(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    Json(req): Json<ChannelSendRequest>,
+) -> impl IntoResponse {
+    if state.pairing.require_pairing() {
+        let auth = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let token = auth.strip_prefix("Bearer ").unwrap_or("");
+        if !state.pairing.is_authenticated(token) {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Unauthorized"})),
+            );
+        }
+    }
+
+    let channel_name = name.to_lowercase();
+    match channel_name.as_str() {
+        "cli" => {
+            use crate::channels::cli::CliChannel;
+            let channel = CliChannel::new();
+            match channel.send(&req.recipient, &req.message).await {
+                Ok(_) => {
+                    let resp = ChannelSendResponse {
+                        sent: true,
+                        channel: "cli".to_string(),
+                        recipient: req.recipient,
+                    };
+                    let body = serde_json::to_value(&resp).unwrap_or(serde_json::Value::Null);
+                    (StatusCode::OK, Json(body))
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                ),
+            }
+        }
+        _ => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("Channel '{}' not found or not supported via API", channel_name)})),
+        ),
+    }
+}
+
+/// GET /v1/channels — list available channels
+async fn handle_v1_channels_list(State(state): State<AppState>) -> impl IntoResponse {
+    let mut channels = vec!["cli".to_string()];
+    if state.whatsapp.is_some() {
+        channels.push("whatsapp".to_string());
+    }
+    (StatusCode::OK, Json(serde_json::json!({"channels": channels})))
 }
 
 /// POST /pair — exchange one-time code for bearer token
@@ -1059,6 +1544,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            service_startup: Instant::now(),
         };
 
         let mut headers = HeaderMap::new();
@@ -1108,6 +1594,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            service_startup: Instant::now(),
         };
 
         let headers = HeaderMap::new();
