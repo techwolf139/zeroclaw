@@ -27,3 +27,12 @@ venv/
 *.key
 *.pem
 credentials.json
+
+# Desktop demo build
+zeroclaw-ui-demo/target/
+
+# Branch planning
+BRANCH_PLAN.md
+
+# Logs
+logs/
