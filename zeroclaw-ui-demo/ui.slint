@@ -1,0 +1,656 @@
+export struct Message {
+    role: string,
+    content: string,
+    timestamp: string,
+}
+
+// Color Palette: Dark OLED Theme
+// Background: #0F172A (slate-900)
+// Surface: #1E293B (slate-800)
+// Accent: #22C55E (green-500)
+// Text: #F8FAFC (slate-50)
+// Muted: #64748B (slate-500)
+
+export component StatusBar inherits Rectangle {
+    in property <string> status;
+    in property <bool> connected;
+    in property <int> wifi-signal;
+    in property <bool> has-notification: false;
+    
+    callback clicked();
+    
+    background: #1E293B;
+    
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: space-between;
+        
+        Text {
+            text: "ZeroClaw";
+            color: #22C55E;
+            font-size: 13px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            
+            Rectangle {
+                width: 16px;
+                height: 12px;
+                VerticalLayout {
+                    spacing: 1px;
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 1 ? #22C55E : #334155; }
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 2 ? #22C55E : #334155; }
+                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 3 ? #22C55E : #334155; }
+                }
+            }
+            
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: root.connected ? #22C55E : #EF4444;
+            }
+            
+            TouchArea {
+                width: 24px;
+                height: 20px;
+                clicked => { root.clicked(); }
+                Text {
+                    text: "[=]";
+                    color: #64748B;
+                    font-size: 11px;
+                }
+            }
+            
+            if root.has-notification: Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: #F59E0B;
+            }
+        }
+    }
+}
+
+export component MessageList inherits Rectangle {
+    in property <[Message]> messages;
+    
+    background: #0F172A;
+    
+    VerticalLayout {
+        spacing: 4px;
+        padding: 8px;
+        
+        for msg in root.messages: HorizontalLayout {
+            alignment: msg.role == "user" ? end : start;
+            
+            Rectangle {
+                min-width: 100px;
+                max-width: 240px;
+                min-height: 36px;
+                max-height: 60px;
+                background: msg.role == "user" ? #334155 : #1E293B;
+                border-radius: 8px;
+                padding: 6px;
+                
+                Text {
+                    text: msg.content;
+                    color: #F8FAFC;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+export component InputBar inherits Rectangle {
+    in-out property <string> text;
+    
+    callback on-send(string);
+    
+    background: #1E293B;
+    
+    HorizontalLayout {
+        padding: 4px;
+        spacing: 6px;
+        
+        input := TextInput {
+            text <=> root.text;
+            font-size: 12px;
+            height: 24px;
+            accepted => {
+                if root.text != "" {
+                    root.on-send(root.text);
+                    root.text = "";
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 44px;
+            height: 24px;
+            clicked => {
+                if input.text != "" {
+                    root.on-send(input.text);
+                    root.text = "";
+                }
+            }
+            Rectangle {
+                background: #EF4444;
+                border-radius: 4px;
+                Text {
+                    text: "Send";
+                    color: white;
+                    font-size: 10px;
+                }
+            }
+        }
+    }
+}
+
+export component MenuOverlay inherits Rectangle {
+    callback close();
+    callback reconnect();
+    callback disconnect();
+    
+    in property <string> server-url;
+    
+    background: #000000aa;
+    
+    Rectangle {
+        width: 280px;
+        height: 200px;
+        background: #0F172A;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: #334155;
+        
+        VerticalLayout {
+            spacing: 0px;
+            
+            Rectangle {
+                height: 28px;
+                background: #1E293B;
+                HorizontalLayout {
+                    padding: 4px;
+                    alignment: space-between;
+                    Text {
+                        text: "[S] Settings";
+                        color: #F8FAFC;
+                        font-size: 12px;
+                    }
+                    TouchArea {
+                        width: 20px;
+                        clicked => { root.close(); }
+                        Text {
+                            text: "[X]";
+                            color: #EF4444;
+                            font-size: 12px;
+                        }
+                    }
+                }
+            }
+            
+            Rectangle {
+                height: 80px;
+                VerticalLayout {
+                    spacing: 4px;
+                    padding: 8px;
+                    Text {
+                        text: "Connection";
+                        color: #64748B;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: "Server: " + root.server-url;
+                        color: #F8FAFC;
+                        font-size: 11px;
+                    }
+                    TouchArea {
+                        height: 20px;
+                        clicked => { root.reconnect(); }
+                        Text {
+                            text: "[C] Reconnect";
+                            color: #22C55E;
+                            font-size: 11px;
+                        }
+                    }
+                    TouchArea {
+                        height: 20px;
+                        clicked => { root.disconnect(); }
+                        Text {
+                            text: "[D] Disconnect";
+                            color: #ff4757;
+                            font-size: 11px;
+                        }
+                    }
+                }
+            }
+            
+            Rectangle {
+                height: 60px;
+                VerticalLayout {
+                    spacing: 2px;
+                    padding: 6px;
+                    Text {
+                        text: "System";
+                        color: #64748B;
+                        font-size: 10px;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Model:";
+                            color: #94A3B8;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "claude-3.5";
+                            color: #F8FAFC;
+                            font-size: 9px;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Provider:";
+                            color: #94A3B8;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "openrouter";
+                            color: #F8FAFC;
+                            font-size: 9px;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: "Memory:";
+                            color: #94A3B8;
+                            font-size: 9px;
+                        }
+                        Text {
+                            text: "128KB / 512KB";
+                            color: #22C55E;
+                            font-size: 9px;
+                        }
+                    }
+                }
+            }
+            
+            Rectangle {
+                height: 60px;
+                VerticalLayout {
+                    spacing: 4px;
+                    padding: 8px;
+                    Text {
+                        text: "About";
+                        color: #64748B;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: "v0.1.0 | ZeroClaw ESP32";
+                        color: #F8FAFC;
+                        font-size: 11px;
+                    }
+                    Text {
+                        text: "320x240 ST7789 Display";
+                        color: #64748B;
+                        font-size: 10px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component QuickActionBar inherits Rectangle {
+    callback clicked-memory();
+    callback clicked-files();
+    callback clicked-browser();
+    callback clicked-settings();
+    
+    background: #1E293B;
+    
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 4px;
+        alignment: space-around;
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-memory(); }
+            Rectangle {
+                background: #334155;
+                border-radius: 4px;
+                Text {
+                    text: "Memory";
+                    color: #22C55E;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-files(); }
+            Rectangle {
+                background: #334155;
+                border-radius: 4px;
+                Text {
+                    text: "LLM";
+                    color: #22C55E;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-browser(); }
+            Rectangle {
+                background: #334155;
+                border-radius: 4px;
+                Text {
+                    text: "Skill";
+                    color: #22C55E;
+                    font-size: 10px;
+                }
+            }
+        }
+        
+        TouchArea {
+            width: 70px;
+            height: 20px;
+            clicked => { root.clicked-settings(); }
+            Rectangle {
+                background: #334155;
+                border-radius: 4px;
+                Text {
+                    text: "Settings";
+                    color: #22C55E;
+                    font-size: 10px;
+                }
+            }
+        }
+    }
+}
+
+export component MemoryOverlay inherits Rectangle {
+    callback close();
+    
+    background: #0F172A;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #1E293B;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #22C55E;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Memory";
+                    color: #F8FAFC;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            for i in 3: Rectangle {
+                min-height: 50px;
+                background: #1E293B;
+                border-radius: 4px;
+                padding: 6px;
+                VerticalLayout {
+                    Text {
+                        text: "Memory Entry " + (i + 1);
+                        color: #22C55E;
+                        font-size: 11px;
+                    }
+                    Text {
+                        text: "Preview text...";
+                        color: #94A3B8;
+                        font-size: 10px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component LLMOverlay inherits Rectangle {
+    callback close();
+    
+    background: #0F172A;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #1E293B;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #22C55E;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "LLM Provider";
+                    color: #F8FAFC;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            Text {
+                text: "Select Provider:";
+                color: #64748B;
+                font-size: 10px;
+            }
+            
+            for p in ["claude-3.5-sonnet", "gpt-4o", "gemini-pro"]: Rectangle {
+                min-height: 30px;
+                background: #1E293B;
+                border-radius: 4px;
+                padding: 6px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "[*]";
+                        color: #22C55E;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: p;
+                        color: #F8FAFC;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SkillOverlay inherits Rectangle {
+    callback close();
+    
+    background: #0F172A;
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        Rectangle {
+            height: 28px;
+            background: #1E293B;
+            HorizontalLayout {
+                padding: 4px;
+                spacing: 8px;
+                TouchArea {
+                    width: 30px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "[<]";
+                        color: #22C55E;
+                        font-size: 12px;
+                    }
+                }
+                Text {
+                    text: "Skills";
+                    color: #F8FAFC;
+                    font-size: 14px;
+                }
+            }
+        }
+        
+        VerticalLayout {
+            spacing: 4px;
+            padding: 8px;
+            
+            Text {
+                text: "Enable Skills:";
+                color: #64748B;
+                font-size: 10px;
+            }
+            
+            for s in ["Shell", "File", "Memory", "Browser", "Screenshot"]: Rectangle {
+                min-height: 24px;
+                background: #1E293B;
+                border-radius: 4px;
+                padding: 4px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "[+]";
+                        color: #22C55E;
+                        font-size: 10px;
+                    }
+                    Text {
+                        text: s;
+                        color: #F8FAFC;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    width: 320px;
+    height: 240px;
+    background: #0F172A;
+    
+    in property <string> status-text: "Ready";
+    in property <bool> is-connected: false;
+    in property <bool> show-menu: false;
+    in property <bool> show-memory: false;
+    in property <bool> show-files: false;
+    in property <bool> show-llm: false;
+    in property <bool> show-skill: false;
+    in property <bool> has-notification: false;
+    in property <int> wifi-signal: 0;
+    in property <string> server-url: "http://192.168.1.100:8080";
+    
+    in property <[Message]> messages: [];
+    in-out property <string> input-text: "";
+    
+    callback send-message(string);
+    callback open-menu();
+    callback open-memory();
+    callback open-llm();
+    callback open-skill();
+    callback close-menu();
+    callback close-memory();
+    callback close-llm();
+    callback close-skill();
+    callback reconnect();
+    callback disconnect-wifi();
+    
+    VerticalLayout {
+        spacing: 0px;
+        
+        StatusBar {
+            status: root.status-text;
+            connected: root.is-connected;
+            wifi-signal: root.wifi-signal;
+            has-notification: root.has-notification;
+            height: 28px;
+            clicked => { root.open-menu(); }
+        }
+        
+        MessageList {
+            messages: root.messages;
+            height: 150px;
+        }
+        
+        QuickActionBar {
+            clicked-memory => { root.open-memory(); }
+            clicked-files => { root.open-llm(); }
+            clicked-browser => { root.open-skill(); }
+            clicked-settings => { root.open-menu(); }
+            height: 24px;
+        }
+        
+        InputBar {
+            text: input-text;
+            on-send(text) => { root.send-message(text); }
+            height: 32px;
+        }
+    }
+    
+    if root.show-menu: MenuOverlay {
+        close => { root.close-menu(); }
+        server-url: root.server-url;
+        reconnect => { root.reconnect(); }
+        disconnect => { root.disconnect-wifi(); }
+    }
+    
+    if root.show-memory: MemoryOverlay {
+        close => { root.close-memory(); }
+    }
+    
+    if root.show-llm: LLMOverlay {
+        close => { root.close-llm(); }
+    }
+    
+    if root.show-skill: SkillOverlay {
+        close => { root.close-skill(); }
+    }
+}
