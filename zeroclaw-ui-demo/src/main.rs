@@ -3,6 +3,73 @@ slint::include_modules!();
 use slint::VecModel;
 use std::rc::Rc;
 
+fn call_chat_api(server_url: &str, message: &str) -> Result<String, String> {
+    let client = reqwest::blocking::Client::new();
+    let url = format!("{}/v1/chat", server_url);
+
+    let body = serde_json::json!({
+        "message": message,
+        "model": "claude-sonnet-4-20250514"
+    });
+
+    let response = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .map_err(|e| e.to_string())?;
+
+    if response.status().is_success() {
+        let json: serde_json::Value = response.json().map_err(|e| e.to_string())?;
+        Ok(json["response"].as_str().unwrap_or("").to_string())
+    } else {
+        Err(format!("API error: {}", response.status()))
+    }
+}
+
+fn get_memories(server_url: &str) -> Result<Vec<String>, String> {
+    let client = reqwest::blocking::Client::new();
+    let url = format!("{}/v1/memories", server_url);
+
+    let response = client.get(&url).send().map_err(|e| e.to_string())?;
+
+    if response.status().is_success() {
+        let json: serde_json::Value = response.json().map_err(|e| e.to_string())?;
+        let memories = json["memories"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|m| m["content"].as_str().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(memories)
+    } else {
+        Err(format!("API error: {}", response.status()))
+    }
+}
+
+fn get_models(server_url: &str) -> Result<Vec<String>, String> {
+    let client = reqwest::blocking::Client::new();
+    let url = format!("{}/v1/models", server_url);
+
+    let response = client.get(&url).send().map_err(|e| e.to_string())?;
+
+    if response.status().is_success() {
+        let json: serde_json::Value = response.json().map_err(|e| e.to_string())?;
+        let models = json["models"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|m| m["id"].as_str().unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(models)
+    } else {
+        Err(format!("API error: {}", response.status()))
+    }
+}
+
 fn main() {
     let app = MainWindow::new().unwrap();
 
@@ -35,23 +102,37 @@ fn main() {
 
     // Callback: send-message
     let messages_clone = messages.clone();
+    let server_url = app.get_server_url().to_string();
     app.on_send_message(move |text| {
         let text = text.trim();
         if text.is_empty() {
             return;
         }
-        // Add user message
+        let server_url = server_url.clone();
+
         messages_clone.push(Message {
             role: "user".into(),
             content: text.into(),
             timestamp: "10:02".into(),
         });
-        // Simulate response
-        messages_clone.push(Message {
-            role: "assistant".into(),
-            content: format!("Echo: {}", text).into(),
-            timestamp: "10:02".into(),
-        });
+
+        // Call API
+        match call_chat_api(&server_url, text) {
+            Ok(response) => {
+                messages_clone.push(Message {
+                    role: "assistant".into(),
+                    content: response.into(),
+                    timestamp: "10:02".into(),
+                });
+            }
+            Err(e) => {
+                messages_clone.push(Message {
+                    role: "assistant".into(),
+                    content: format!("Error: {}", e).into(),
+                    timestamp: "10:02".into(),
+                });
+            }
+        }
     });
 
     // Callback: open-menu
@@ -65,18 +146,40 @@ fn main() {
 
     // Callback: open-memory
     let app_weak = app.as_weak();
+    let server_url = app.get_server_url().to_string();
     app.on_open_memory(move || {
-        println!("Opening memory...");
+        println!("Loading memories...");
+        let server_url = server_url.clone();
         if let Some(app) = app_weak.upgrade() {
+            let server_url = server_url.clone();
+            match get_memories(&server_url) {
+                Ok(memories) => {
+                    println!("Loaded {} memories", memories.len());
+                }
+                Err(e) => {
+                    println!("Error loading memories: {}", e);
+                }
+            }
             app.set_show_memory(true);
         }
     });
 
     // Callback: open-llm
     let app_weak = app.as_weak();
+    let server_url = app.get_server_url().to_string();
     app.on_open_llm(move || {
-        println!("Opening LLM...");
+        println!("Loading models...");
+        let server_url = server_url.clone();
         if let Some(app) = app_weak.upgrade() {
+            let server_url = server_url.clone();
+            match get_models(&server_url) {
+                Ok(models) => {
+                    println!("Loaded {} models", models.len());
+                }
+                Err(e) => {
+                    println!("Error loading models: {}", e);
+                }
+            }
             app.set_show_llm(true);
         }
     });
