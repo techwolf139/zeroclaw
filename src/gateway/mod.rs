@@ -491,7 +491,7 @@ async fn handle_v1_memories_list(
 ) -> impl IntoResponse {
     let limit = query.limit.unwrap_or(10);
     let entries = if let Some(q) = query.query {
-        match state.mem.recall(&q, limit).await {
+        match state.mem.recall(&q, limit, None).await {
             Ok(entries) => entries,
             Err(e) => {
                 return (
@@ -501,7 +501,7 @@ async fn handle_v1_memories_list(
             }
         }
     } else {
-        match state.mem.list(None).await {
+        match state.mem.list(None, None).await {
             Ok(entries) => entries,
             Err(e) => {
                 return (
@@ -527,7 +527,7 @@ async fn handle_v1_memories_create(
         "conversation" => MemoryCategory::Conversation,
         _ => MemoryCategory::Custom(req.category.clone()),
     };
-    if let Err(e) = state.mem.store(&req.key, &req.content, category).await {
+    if let Err(e) = state.mem.store(&req.key, &req.content, category, None).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -721,7 +721,7 @@ async fn handle_v1_tools_execute(
                     "daily" => MemoryCategory::Daily,
                     _ => MemoryCategory::Custom(category.to_string()),
                 };
-                match state.mem.store(key, content, cat).await {
+                match state.mem.store(key, content, cat, None).await {
                     Ok(_) => Ok(format!("Stored: {}", key)),
                     Err(e) => Err(e.to_string()),
                 }
@@ -736,7 +736,7 @@ async fn handle_v1_tools_execute(
                     .get("limit")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(5) as usize;
-                match state.mem.recall(query, limit).await {
+                match state.mem.recall(query, limit, None).await {
                     Ok(entries) => {
                         let results: Vec<String> = entries
                             .iter()
@@ -857,8 +857,10 @@ async fn handle_v1_channels_send(
     match channel_name.as_str() {
         "cli" => {
             use crate::channels::cli::CliChannel;
+            use crate::channels::traits::SendMessage;
             let channel = CliChannel::new();
-            match channel.send(&req.recipient, &req.message).await {
+            let msg = SendMessage::new(&req.message, &req.recipient);
+            match channel.send(&msg).await {
                 Ok(_) => {
                     let resp = ChannelSendResponse {
                         sent: true,
@@ -1653,6 +1655,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            service_startup: Instant::now(),
         };
 
         let response = handle_webhook(
@@ -1688,6 +1691,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            service_startup: Instant::now(),
         };
 
         let mut headers = HeaderMap::new();
@@ -1726,6 +1730,7 @@ mod tests {
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
             whatsapp: None,
             whatsapp_app_secret: None,
+            service_startup: Instant::now(),
         };
 
         let mut headers = HeaderMap::new();
