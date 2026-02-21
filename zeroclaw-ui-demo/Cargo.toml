@@ -3,8 +3,6 @@ name = "zeroclaw-ui-demo"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-
 [[bin]]
 name = "zeroclaw-ui-demo"
 path = "src/main.rs"
@@ -17,3 +15,6 @@ slint = "1.10"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[dev-dependencies]
+mockito = "1.6"

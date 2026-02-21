@@ -11,12 +11,9 @@ use crate::channels::{Channel, SendMessage, WhatsAppChannel};
 use crate::config::Config;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::providers::{self, Provider};
-use crate::runtime;
 use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
-use crate::security::SecurityPolicy;
-use crate::tools;
 use crate::util::truncate_with_ellipsis;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use axum::{
     body::Bytes,
     extract::{Path, Query, State},
@@ -25,10 +22,9 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -47,13 +43,6 @@ fn webhook_memory_key() -> String {
 
 fn whatsapp_memory_key(msg: &crate::channels::traits::ChannelMessage) -> String {
     format!("whatsapp_{}_{}", msg.sender, msg.id)
-}
-
-fn hash_webhook_secret(value: &str) -> String {
-    use sha2::{Digest, Sha256};
-
-    let digest = Sha256::digest(value.as_bytes());
-    hex::encode(digest)
 }
 
 /// How often the rate limiter sweeps stale IP entries from its map.
@@ -83,7 +72,10 @@ impl SlidingWindowRateLimiter {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window).unwrap_or_else(Instant::now);
 
-        let mut guard = self.requests.lock();
+        let mut guard = self
+            .requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (requests, last_sweep) = &mut *guard;
 
         // Periodic sweep: remove IPs with no recent requests
@@ -148,7 +140,10 @@ impl IdempotencyStore {
     /// Returns true if this key is new and is now recorded.
     fn record_if_new(&self, key: &str) -> bool {
         let now = Instant::now();
-        let mut keys = self.keys.lock();
+        let mut keys = self
+            .keys
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         keys.retain(|_, seen_at| now.duration_since(*seen_at) < self.ttl);
 
@@ -176,14 +171,12 @@ fn client_key_from_headers(headers: &HeaderMap) -> String {
 /// Shared state for all axum handlers
 #[derive(Clone)]
 pub struct AppState {
-    pub config: Arc<Mutex<Config>>,
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub temperature: f64,
     pub mem: Arc<dyn Memory>,
     pub auto_save: bool,
-    /// SHA-256 hash of `X-Webhook-Secret` (hex-encoded), never plaintext.
-    pub webhook_secret_hash: Option<Arc<str>>,
+    pub webhook_secret: Option<Arc<str>>,
     pub pairing: Arc<PairingGuard>,
     pub rate_limiter: Arc<GatewayRateLimiter>,
     pub idempotency_store: Arc<IdempotencyStore>,
@@ -206,7 +199,6 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
              [gateway] allow_public_bind = true in config.toml (NOT recommended)."
         );
     }
-    let config_state = Arc::new(Mutex::new(config.clone()));
 
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -224,50 +216,20 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .clone()
         .unwrap_or_else(|| "anthropic/claude-sonnet-4".into());
     let temperature = config.default_temperature;
-    let mem: Arc<dyn Memory> = Arc::from(memory::create_memory(
+    let mem: Arc<dyn Memory> = Arc::from(memory::create_memory_with_storage(
         &config.memory,
+        Some(&config.storage.provider.config),
         &config.workspace_dir,
         config.api_key.as_deref(),
     )?);
-    let runtime: Arc<dyn runtime::RuntimeAdapter> =
-        Arc::from(runtime::create_runtime(&config.runtime)?);
-    let security = Arc::new(SecurityPolicy::from_config(
-        &config.autonomy,
-        &config.workspace_dir,
-    ));
 
-    let (composio_key, composio_entity_id) = if config.composio.enabled {
-        (
-            config.composio.api_key.as_deref(),
-            Some(config.composio.entity_id.as_str()),
-        )
-    } else {
-        (None, None)
-    };
-
-    let _tools_registry = Arc::new(tools::all_tools_with_runtime(
-        Arc::new(config.clone()),
-        &security,
-        runtime,
-        Arc::clone(&mem),
-        composio_key,
-        composio_entity_id,
-        &config.browser,
-        &config.http_request,
-        &config.workspace_dir,
-        &config.agents,
-        config.api_key.as_deref(),
-        &config,
-    ));
     // Extract webhook secret for authentication
-    let webhook_secret_hash: Option<Arc<str>> =
-        config.channels_config.webhook.as_ref().and_then(|webhook| {
-            webhook.secret.as_ref().and_then(|raw_secret| {
-                let trimmed_secret = raw_secret.trim();
-                (!trimmed_secret.is_empty())
-                    .then(|| Arc::<str>::from(hash_webhook_secret(trimmed_secret)))
-            })
-        });
+    let webhook_secret: Option<Arc<str>> = config
+        .channels_config
+        .webhook
+        .as_ref()
+        .and_then(|w| w.secret.as_deref())
+        .map(Arc::from);
 
     // WhatsApp channel (if configured)
     let whatsapp_channel: Option<Arc<WhatsAppChannel>> =
@@ -353,19 +315,21 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     } else {
         println!("  ⚠️  Pairing: DISABLED (all requests accepted)");
     }
+    if webhook_secret.is_some() {
+        println!("  🔒 Webhook secret: ENABLED");
+    }
     println!("  Press Ctrl+C to stop.\n");
 
     crate::health::mark_component_ok("gateway");
 
     // Build shared state
     let state = AppState {
-        config: config_state,
         provider,
         model,
         temperature,
         mem,
         auto_save: config.memory.auto_save,
-        webhook_secret_hash,
+        webhook_secret,
         pairing,
         rate_limiter,
         idempotency_store,
@@ -527,7 +491,11 @@ async fn handle_v1_memories_create(
         "conversation" => MemoryCategory::Conversation,
         _ => MemoryCategory::Custom(req.category.clone()),
     };
-    if let Err(e) = state.mem.store(&req.key, &req.content, category, None).await {
+    if let Err(e) = state
+        .mem
+        .store(&req.key, &req.content, category, None)
+        .await
+    {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -878,7 +846,9 @@ async fn handle_v1_channels_send(
         }
         _ => (
             StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": format!("Channel '{}' not found or not supported via API", channel_name)})),
+            Json(
+                serde_json::json!({"error": format!("Channel '{}' not found or not supported via API", channel_name)}),
+            ),
         ),
     }
 }
@@ -889,7 +859,10 @@ async fn handle_v1_channels_list(State(state): State<AppState>) -> impl IntoResp
     if state.whatsapp.is_some() {
         channels.push("whatsapp".to_string());
     }
-    (StatusCode::OK, Json(serde_json::json!({"channels": channels})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"channels": channels})),
+    )
 }
 
 /// POST /pair — exchange one-time code for bearer token
@@ -912,20 +885,8 @@ async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl 
     match state.pairing.try_pair(code) {
         Ok(Some(token)) => {
             tracing::info!("🔐 New client paired successfully");
-            if let Err(err) = persist_pairing_tokens(&state.config, &state.pairing) {
-                tracing::error!("🔐 Pairing succeeded but token persistence failed: {err:#}");
-                let body = serde_json::json!({
-                    "paired": true,
-                    "persisted": false,
-                    "token": token,
-                    "message": "Paired for this process, but failed to persist token to config.toml. Check config path and write permissions.",
-                });
-                return (StatusCode::OK, Json(body));
-            }
-
             let body = serde_json::json!({
                 "paired": true,
-                "persisted": true,
                 "token": token,
                 "message": "Save this token — use it as Authorization: Bearer <token>"
             });
@@ -947,14 +908,6 @@ async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl 
             (StatusCode::TOO_MANY_REQUESTS, Json(err))
         }
     }
-}
-
-fn persist_pairing_tokens(config: &Arc<Mutex<Config>>, pairing: &PairingGuard) -> Result<()> {
-    let paired_tokens = pairing.tokens();
-    let mut cfg = config.lock();
-    cfg.gateway.paired_tokens = paired_tokens;
-    cfg.save()
-        .context("Failed to persist paired tokens to config.toml")
 }
 
 /// Webhook request body
@@ -996,15 +949,12 @@ async fn handle_webhook(
     }
 
     // ── Webhook secret auth (optional, additional layer) ──
-    if let Some(ref secret_hash) = state.webhook_secret_hash {
-        let header_hash = headers
+    if let Some(ref secret) = state.webhook_secret {
+        let header_val = headers
             .get("X-Webhook-Secret")
-            .and_then(|v| v.to_str().ok())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(hash_webhook_secret);
-        match header_hash {
-            Some(val) if constant_time_eq(&val, secret_hash.as_ref()) => {}
+            .and_then(|v| v.to_str().ok());
+        match header_val {
+            Some(val) if constant_time_eq(val, secret.as_ref()) => {}
             _ => {
                 tracing::warn!("Webhook: rejected request — invalid or missing X-Webhook-Secret");
                 let err = serde_json::json!({"error": "Unauthorized — invalid or missing X-Webhook-Secret header"});
@@ -1214,21 +1164,18 @@ async fn handle_whatsapp_message(
         {
             Ok(response) => {
                 // Send reply via WhatsApp
-                if let Err(e) = wa
-                    .send(&SendMessage::new(response, &msg.reply_target))
-                    .await
-                {
+                let send_msg = SendMessage::new(&response, &msg.sender);
+                if let Err(e) = wa.send(&send_msg).await {
                     tracing::error!("Failed to send WhatsApp reply: {e}");
                 }
             }
             Err(e) => {
                 tracing::error!("LLM error for WhatsApp message: {e:#}");
-                let _ = wa
-                    .send(&SendMessage::new(
-                        "Sorry, I couldn't process your message right now.",
-                        &msg.reply_target,
-                    ))
-                    .await;
+                let send_msg = SendMessage::new(
+                    "Sorry, I couldn't process your message right now.",
+                    &msg.sender,
+                );
+                let _ = wa.send(&send_msg).await;
             }
         }
     }
@@ -1247,8 +1194,8 @@ mod tests {
     use axum::http::HeaderValue;
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
-    use parking_lot::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     #[test]
     fn security_body_limit_is_64kb() {
@@ -1305,16 +1252,20 @@ mod tests {
         assert!(limiter.allow("ip-3"));
 
         {
-            let guard = limiter.requests.lock();
+            let guard = limiter
+                .requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             assert_eq!(guard.0.len(), 3);
         }
 
         // Force a sweep by backdating last_sweep
         {
-            let mut guard = limiter.requests.lock();
-            guard.1 = Instant::now()
-                .checked_sub(Duration::from_secs(RATE_LIMITER_SWEEP_INTERVAL_SECS + 1))
-                .unwrap();
+            let mut guard = limiter
+                .requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.1 = Instant::now() - Duration::from_secs(RATE_LIMITER_SWEEP_INTERVAL_SECS + 1);
             // Clear timestamps for ip-2 and ip-3 to simulate stale entries
             guard.0.get_mut("ip-2").unwrap().clear();
             guard.0.get_mut("ip-3").unwrap().clear();
@@ -1324,7 +1275,10 @@ mod tests {
         assert!(limiter.allow("ip-1"));
 
         {
-            let guard = limiter.requests.lock();
+            let guard = limiter
+                .requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             assert_eq!(guard.0.len(), 1, "Stale entries should have been swept");
             assert!(guard.0.contains_key("ip-1"));
         }
@@ -1347,33 +1301,6 @@ mod tests {
     }
 
     #[test]
-    fn persist_pairing_tokens_writes_config_tokens() {
-        let temp = tempfile::tempdir().unwrap();
-        let config_path = temp.path().join("config.toml");
-        let workspace_path = temp.path().join("workspace");
-
-        let mut config = Config::default();
-        config.config_path = config_path.clone();
-        config.workspace_dir = workspace_path;
-        config.save().unwrap();
-
-        let guard = PairingGuard::new(true, &[]);
-        let code = guard.pairing_code().unwrap();
-        let token = guard.try_pair(&code).unwrap().unwrap();
-        assert!(guard.is_authenticated(&token));
-
-        let shared_config = Arc::new(Mutex::new(config));
-        persist_pairing_tokens(&shared_config, &guard).unwrap();
-
-        let saved = std::fs::read_to_string(config_path).unwrap();
-        let parsed: Config = toml::from_str(&saved).unwrap();
-        assert_eq!(parsed.gateway.paired_tokens.len(), 1);
-        let persisted = &parsed.gateway.paired_tokens[0];
-        assert_eq!(persisted.len(), 64);
-        assert!(persisted.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
     fn webhook_memory_key_is_unique() {
         let key1 = webhook_memory_key();
         let key2 = webhook_memory_key();
@@ -1388,7 +1315,6 @@ mod tests {
         let msg = ChannelMessage {
             id: "wamid-123".into(),
             sender: "+1234567890".into(),
-            reply_target: "+1234567890".into(),
             content: "hello".into(),
             channel: "whatsapp".into(),
             timestamp: 1,
@@ -1412,17 +1338,11 @@ mod tests {
             _key: &str,
             _content: &str,
             _category: MemoryCategory,
-            _session_id: Option<&str>,
         ) -> anyhow::Result<()> {
             Ok(())
         }
 
-        async fn recall(
-            &self,
-            _query: &str,
-            _limit: usize,
-            _session_id: Option<&str>,
-        ) -> anyhow::Result<Vec<MemoryEntry>> {
+        async fn recall(&self, _query: &str, _limit: usize) -> anyhow::Result<Vec<MemoryEntry>> {
             Ok(Vec::new())
         }
 
@@ -1433,7 +1353,6 @@ mod tests {
         async fn list(
             &self,
             _category: Option<&MemoryCategory>,
-            _session_id: Option<&str>,
         ) -> anyhow::Result<Vec<MemoryEntry>> {
             Ok(Vec::new())
         }
@@ -1486,18 +1405,15 @@ mod tests {
             key: &str,
             _content: &str,
             _category: MemoryCategory,
-            _session_id: Option<&str>,
         ) -> anyhow::Result<()> {
-            self.keys.lock().push(key.to_string());
+            self.keys
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(key.to_string());
             Ok(())
         }
 
-        async fn recall(
-            &self,
-            _query: &str,
-            _limit: usize,
-            _session_id: Option<&str>,
-        ) -> anyhow::Result<Vec<MemoryEntry>> {
+        async fn recall(&self, _query: &str, _limit: usize) -> anyhow::Result<Vec<MemoryEntry>> {
             Ok(Vec::new())
         }
 
@@ -1508,7 +1424,6 @@ mod tests {
         async fn list(
             &self,
             _category: Option<&MemoryCategory>,
-            _session_id: Option<&str>,
         ) -> anyhow::Result<Vec<MemoryEntry>> {
             Ok(Vec::new())
         }
@@ -1518,7 +1433,11 @@ mod tests {
         }
 
         async fn count(&self) -> anyhow::Result<usize> {
-            let size = self.keys.lock().len();
+            let size = self
+                .keys
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .len();
             Ok(size)
         }
 
@@ -1534,13 +1453,12 @@ mod tests {
         let memory: Arc<dyn Memory> = Arc::new(MockMemory);
 
         let state = AppState {
-            config: Arc::new(Mutex::new(Config::default())),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
             mem: memory,
             auto_save: false,
-            webhook_secret_hash: None,
+            webhook_secret: None,
             pairing: Arc::new(PairingGuard::new(false, &[])),
             rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100)),
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
@@ -1584,13 +1502,12 @@ mod tests {
         let memory: Arc<dyn Memory> = tracking_impl.clone();
 
         let state = AppState {
-            config: Arc::new(Mutex::new(Config::default())),
             provider,
             model: "test-model".into(),
             temperature: 0.0,
             mem: memory,
             auto_save: true,
-            webhook_secret_hash: None,
+            webhook_secret: None,
             pairing: Arc::new(PairingGuard::new(false, &[])),
             rate_limiter: Arc::new(GatewayRateLimiter::new(100, 100)),
             idempotency_store: Arc::new(IdempotencyStore::new(Duration::from_secs(300))),
@@ -1617,7 +1534,11 @@ mod tests {
             .into_response();
         assert_eq!(second.status(), StatusCode::OK);
 
-        let keys = tracking_impl.keys.lock().clone();
+        let keys = tracking_impl
+            .keys
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         assert_eq!(keys.len(), 2);
         assert_ne!(keys[0], keys[1]);
         assert!(keys[0].starts_with("webhook_msg_"));
@@ -1753,6 +1674,8 @@ mod tests {
     // ══════════════════════════════════════════════════════════
     // WhatsApp Signature Verification Tests (CWE-345 Prevention)
     // ══════════════════════════════════════════════════════════
+    // WhatsApp Signature Verification Tests (CWE-345 Prevention)
+    // ══════════════════════════════════════════════════════════
 
     fn compute_whatsapp_signature_hex(secret: &str, body: &[u8]) -> String {
         use hmac::{Hmac, Mac};
@@ -1770,7 +1693,7 @@ mod tests {
     #[test]
     fn whatsapp_signature_valid() {
         // Test with known values
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret_key";
         let body = b"test body content";
 
         let signature_header = compute_whatsapp_signature_header(app_secret, body);
@@ -1784,8 +1707,8 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_invalid_wrong_secret() {
-        let app_secret = "correct_secret_key_abc";
-        let wrong_secret = "wrong_secret_key_xyz";
+        let app_secret = "correct_secret";
+        let wrong_secret = "wrong_secret";
         let body = b"test body content";
 
         let signature_header = compute_whatsapp_signature_header(wrong_secret, body);
@@ -1799,7 +1722,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_invalid_wrong_body() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let original_body = b"original body";
         let tampered_body = b"tampered body";
 
@@ -1815,7 +1738,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_missing_prefix() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         // Signature without "sha256=" prefix
@@ -1830,7 +1753,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_empty_header() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         assert!(!verify_whatsapp_signature(app_secret, body, ""));
@@ -1838,7 +1761,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_invalid_hex() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         // Invalid hex characters
@@ -1853,7 +1776,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_empty_body() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"";
 
         let signature_header = compute_whatsapp_signature_header(app_secret, body);
@@ -1867,8 +1790,8 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_unicode_body() {
-        let app_secret = "test_secret_key_12345";
-        let body = "Hello 🦀 World".as_bytes();
+        let app_secret = "test_secret";
+        let body = "Hello 🦀 世界".as_bytes();
 
         let signature_header = compute_whatsapp_signature_header(app_secret, body);
 
@@ -1881,7 +1804,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_json_payload() {
-        let app_secret = "test_app_secret_key_xyz";
+        let app_secret = "my_app_secret_from_meta";
         let body = br#"{"entry":[{"changes":[{"value":{"messages":[{"from":"1234567890","text":{"body":"Hello"}}]}}]}]}"#;
 
         let signature_header = compute_whatsapp_signature_header(app_secret, body);
@@ -1895,7 +1818,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_case_sensitive_prefix() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         let hex_sig = compute_whatsapp_signature_hex(app_secret, body);
@@ -1911,7 +1834,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_truncated_hex() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         let hex_sig = compute_whatsapp_signature_hex(app_secret, body);
@@ -1927,7 +1850,7 @@ mod tests {
 
     #[test]
     fn whatsapp_signature_extra_bytes() {
-        let app_secret = "test_secret_key_12345";
+        let app_secret = "test_secret";
         let body = b"test body";
 
         let hex_sig = compute_whatsapp_signature_hex(app_secret, body);

@@ -22,56 +22,56 @@ export component StatusBar inherits Rectangle {
     background: #1E293B;
     
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 8px;
+        padding-left: 20px;
+        padding-right: 20px;
+        spacing: 16px;
         alignment: space-between;
         
         Text {
             text: "ZeroClaw";
             color: #22C55E;
-            font-size: 13px;
+            font-size: 24px;
             font-weight: 600;
             vertical-alignment: center;
         }
         
         HorizontalLayout {
-            spacing: 8px;
+            spacing: 16px;
             alignment: end;
             
             Rectangle {
-                width: 16px;
-                height: 12px;
+                width: 32px;
+                height: 24px;
                 VerticalLayout {
-                    spacing: 1px;
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 1 ? #22C55E : #334155; }
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 2 ? #22C55E : #334155; }
-                    Rectangle { width: 4px; height: 2px; background: root.wifi-signal >= 3 ? #22C55E : #334155; }
+                    spacing: 2px;
+                    Rectangle { width: 8px; height: 4px; background: root.wifi-signal >= 1 ? #22C55E : #334155; }
+                    Rectangle { width: 8px; height: 4px; background: root.wifi-signal >= 2 ? #22C55E : #334155; }
+                    Rectangle { width: 8px; height: 4px; background: root.wifi-signal >= 3 ? #22C55E : #334155; }
                 }
             }
             
             Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
                 background: root.connected ? #22C55E : #EF4444;
             }
             
             TouchArea {
-                width: 24px;
-                height: 20px;
+                width: 48px;
+                height: 40px;
                 clicked => { root.clicked(); }
                 Text {
                     text: "[=]";
                     color: #64748B;
-                    font-size: 11px;
+                    font-size: 20px;
                 }
             }
             
             if root.has-notification: Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
                 background: #F59E0B;
             }
         }
@@ -80,29 +80,29 @@ export component StatusBar inherits Rectangle {
 
 export component MessageList inherits Rectangle {
     in property <[Message]> messages;
-    
+
     background: #0F172A;
-    
+
     VerticalLayout {
-        spacing: 4px;
-        padding: 8px;
-        
+        spacing: 8px;
+        padding: 16px;
+
         for msg in root.messages: HorizontalLayout {
             alignment: msg.role == "user" ? end : start;
-            
+
             Rectangle {
-                min-width: 100px;
-                max-width: 240px;
-                min-height: 36px;
-                max-height: 60px;
+                min-width: 200px;
+                max-width: 600px;
+                min-height: 60px;
+                max-height: 120px;
                 background: msg.role == "user" ? #334155 : #1E293B;
-                border-radius: 8px;
-                padding: 6px;
-                
+                border-radius: 12px;
+                padding: 12px;
+
                 Text {
                     text: msg.content;
                     color: #F8FAFC;
-                    font-size: 11px;
+                    font-size: 16px;
                     wrap: word-wrap;
                 }
             }
@@ -112,19 +112,19 @@ export component MessageList inherits Rectangle {
 
 export component InputBar inherits Rectangle {
     in-out property <string> text;
-    
+
     callback on-send(string);
-    
+
     background: #1E293B;
-    
+
     HorizontalLayout {
-        padding: 4px;
-        spacing: 6px;
-        
+        padding: 12px;
+        spacing: 12px;
+
         input := TextInput {
             text <=> root.text;
-            font-size: 12px;
-            height: 24px;
+            font-size: 18px;
+            height: 48px;
             accepted => {
                 if root.text != "" {
                     root.on-send(root.text);
@@ -132,10 +132,10 @@ export component InputBar inherits Rectangle {
                 }
             }
         }
-        
+
         TouchArea {
-            width: 44px;
-            height: 24px;
+            width: 100px;
+            height: 48px;
             clicked => {
                 if input.text != "" {
                     root.on-send(input.text);
@@ -144,11 +144,11 @@ export component InputBar inherits Rectangle {
             }
             Rectangle {
                 background: #EF4444;
-                border-radius: 4px;
+                border-radius: 8px;
                 Text {
                     text: "Send";
                     color: white;
-                    font-size: 10px;
+                    font-size: 16px;
                 }
             }
         }
@@ -159,16 +159,16 @@ export component MenuOverlay inherits Rectangle {
     callback close();
     callback reconnect();
     callback disconnect();
-    
+
     in property <string> server-url;
-    
+
     background: #000000aa;
-    
+
     Rectangle {
-        width: 280px;
-        height: 200px;
+        width: 600px;
+        height: 480px;
         background: #0F172A;
-        border-radius: 8px;
+        border-radius: 12px;
         border-width: 1px;
         border-color: #334155;
         
@@ -176,135 +176,135 @@ export component MenuOverlay inherits Rectangle {
             spacing: 0px;
             
             Rectangle {
-                height: 28px;
+                height: 60px;
                 background: #1E293B;
                 HorizontalLayout {
-                    padding: 4px;
+                    padding: 16px;
                     alignment: space-between;
                     Text {
                         text: "[S] Settings";
                         color: #F8FAFC;
-                        font-size: 12px;
+                        font-size: 20px;
                     }
                     TouchArea {
-                        width: 20px;
+                        width: 40px;
                         clicked => { root.close(); }
                         Text {
                             text: "[X]";
                             color: #EF4444;
-                            font-size: 12px;
+                            font-size: 20px;
                         }
                     }
                 }
             }
             
             Rectangle {
-                height: 80px;
+                height: 160px;
                 VerticalLayout {
-                    spacing: 4px;
-                    padding: 8px;
+                    spacing: 8px;
+                    padding: 16px;
                     Text {
                         text: "Connection";
                         color: #64748B;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                     Text {
                         text: "Server: " + root.server-url;
                         color: #F8FAFC;
-                        font-size: 11px;
+                        font-size: 18px;
                     }
                     TouchArea {
-                        height: 20px;
+                        height: 40px;
                         clicked => { root.reconnect(); }
                         Text {
                             text: "[C] Reconnect";
                             color: #22C55E;
-                            font-size: 11px;
+                            font-size: 16px;
                         }
                     }
                     TouchArea {
-                        height: 20px;
+                        height: 40px;
                         clicked => { root.disconnect(); }
                         Text {
                             text: "[D] Disconnect";
                             color: #ff4757;
-                            font-size: 11px;
+                            font-size: 16px;
                         }
                     }
                 }
             }
             
             Rectangle {
-                height: 60px;
+                height: 140px;
                 VerticalLayout {
-                    spacing: 2px;
-                    padding: 6px;
+                    spacing: 8px;
+                    padding: 16px;
                     Text {
                         text: "System";
                         color: #64748B;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: 16px;
                         Text {
                             text: "Model:";
                             color: #94A3B8;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                         Text {
                             text: "claude-3.5";
                             color: #F8FAFC;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: 16px;
                         Text {
                             text: "Provider:";
                             color: #94A3B8;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                         Text {
                             text: "openrouter";
                             color: #F8FAFC;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: 16px;
                         Text {
                             text: "Memory:";
                             color: #94A3B8;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                         Text {
                             text: "128KB / 512KB";
                             color: #22C55E;
-                            font-size: 9px;
+                            font-size: 14px;
                         }
                     }
                 }
             }
-            
+
             Rectangle {
-                height: 60px;
+                height: 100px;
                 VerticalLayout {
-                    spacing: 4px;
-                    padding: 8px;
+                    spacing: 8px;
+                    padding: 16px;
                     Text {
                         text: "About";
                         color: #64748B;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                     Text {
-                        text: "v0.1.0 | ZeroClaw ESP32";
+                        text: "v0.1.0 | ZeroClaw Desktop";
                         color: #F8FAFC;
-                        font-size: 11px;
+                        font-size: 18px;
                     }
                     Text {
-                        text: "320x240 ST7789 Display";
+                        text: "800x600 Display";
                         color: #64748B;
-                        font-size: 10px;
+                        font-size: 14px;
                     }
                 }
             }
@@ -317,70 +317,70 @@ export component QuickActionBar inherits Rectangle {
     callback clicked-files();
     callback clicked-browser();
     callback clicked-settings();
-    
+
     background: #1E293B;
-    
+
     HorizontalLayout {
-        padding: 2px;
-        spacing: 4px;
+        padding: 8px;
+        spacing: 16px;
         alignment: space-around;
-        
+
         TouchArea {
-            width: 70px;
-            height: 20px;
+            width: 160px;
+            height: 36px;
             clicked => { root.clicked-memory(); }
             Rectangle {
                 background: #334155;
-                border-radius: 4px;
+                border-radius: 8px;
                 Text {
                     text: "Memory";
                     color: #22C55E;
-                    font-size: 10px;
+                    font-size: 14px;
                 }
             }
         }
-        
+
         TouchArea {
-            width: 70px;
-            height: 20px;
+            width: 160px;
+            height: 36px;
             clicked => { root.clicked-files(); }
             Rectangle {
                 background: #334155;
-                border-radius: 4px;
+                border-radius: 8px;
                 Text {
                     text: "LLM";
                     color: #22C55E;
-                    font-size: 10px;
+                    font-size: 14px;
                 }
             }
         }
-        
+
         TouchArea {
-            width: 70px;
-            height: 20px;
+            width: 160px;
+            height: 36px;
             clicked => { root.clicked-browser(); }
             Rectangle {
                 background: #334155;
-                border-radius: 4px;
+                border-radius: 8px;
                 Text {
                     text: "Skill";
                     color: #22C55E;
-                    font-size: 10px;
+                    font-size: 14px;
                 }
             }
         }
-        
+
         TouchArea {
-            width: 70px;
-            height: 20px;
+            width: 160px;
+            height: 36px;
             clicked => { root.clicked-settings(); }
             Rectangle {
                 background: #334155;
-                border-radius: 4px;
+                border-radius: 8px;
                 Text {
                     text: "Settings";
                     color: #22C55E;
-                    font-size: 10px;
+                    font-size: 14px;
                 }
             }
         }
@@ -389,54 +389,54 @@ export component QuickActionBar inherits Rectangle {
 
 export component MemoryOverlay inherits Rectangle {
     callback close();
-    
+
     background: #0F172A;
-    
+
     VerticalLayout {
         spacing: 0px;
-        
+
         Rectangle {
-            height: 28px;
+            height: 60px;
             background: #1E293B;
             HorizontalLayout {
-                padding: 4px;
-                spacing: 8px;
+                padding: 16px;
+                spacing: 16px;
                 TouchArea {
-                    width: 30px;
+                    width: 60px;
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
                         color: #22C55E;
-                        font-size: 12px;
+                        font-size: 20px;
                     }
                 }
                 Text {
                     text: "Memory";
                     color: #F8FAFC;
-                    font-size: 14px;
+                    font-size: 24px;
                 }
             }
         }
-        
+
         VerticalLayout {
-            spacing: 4px;
-            padding: 8px;
-            
+            spacing: 12px;
+            padding: 20px;
+
             for i in 3: Rectangle {
-                min-height: 50px;
+                min-height: 120px;
                 background: #1E293B;
-                border-radius: 4px;
-                padding: 6px;
+                border-radius: 8px;
+                padding: 16px;
                 VerticalLayout {
                     Text {
                         text: "Memory Entry " + (i + 1);
                         color: #22C55E;
-                        font-size: 11px;
+                        font-size: 18px;
                     }
                     Text {
                         text: "Preview text...";
                         color: #94A3B8;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                 }
             }
@@ -446,61 +446,61 @@ export component MemoryOverlay inherits Rectangle {
 
 export component LLMOverlay inherits Rectangle {
     callback close();
-    
+
     background: #0F172A;
-    
+
     VerticalLayout {
         spacing: 0px;
-        
+
         Rectangle {
-            height: 28px;
+            height: 60px;
             background: #1E293B;
             HorizontalLayout {
-                padding: 4px;
-                spacing: 8px;
+                padding: 16px;
+                spacing: 16px;
                 TouchArea {
-                    width: 30px;
+                    width: 60px;
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
                         color: #22C55E;
-                        font-size: 12px;
+                        font-size: 20px;
                     }
                 }
                 Text {
                     text: "LLM Provider";
                     color: #F8FAFC;
-                    font-size: 14px;
+                    font-size: 24px;
                 }
             }
         }
-        
+
         VerticalLayout {
-            spacing: 4px;
-            padding: 8px;
-            
+            spacing: 12px;
+            padding: 20px;
+
             Text {
                 text: "Select Provider:";
                 color: #64748B;
-                font-size: 10px;
+                font-size: 16px;
             }
-            
+
             for p in ["claude-3.5-sonnet", "gpt-4o", "gemini-pro"]: Rectangle {
-                min-height: 30px;
+                min-height: 60px;
                 background: #1E293B;
-                border-radius: 4px;
-                padding: 6px;
+                border-radius: 8px;
+                padding: 16px;
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: 16px;
                     Text {
                         text: "[*]";
                         color: #22C55E;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                     Text {
                         text: p;
                         color: #F8FAFC;
-                        font-size: 11px;
+                        font-size: 18px;
                     }
                 }
             }
@@ -510,61 +510,61 @@ export component LLMOverlay inherits Rectangle {
 
 export component SkillOverlay inherits Rectangle {
     callback close();
-    
+
     background: #0F172A;
-    
+
     VerticalLayout {
         spacing: 0px;
-        
+
         Rectangle {
-            height: 28px;
+            height: 60px;
             background: #1E293B;
             HorizontalLayout {
-                padding: 4px;
-                spacing: 8px;
+                padding: 16px;
+                spacing: 16px;
                 TouchArea {
-                    width: 30px;
+                    width: 60px;
                     clicked => { root.close(); }
                     Text {
                         text: "[<]";
                         color: #22C55E;
-                        font-size: 12px;
+                        font-size: 20px;
                     }
                 }
                 Text {
                     text: "Skills";
                     color: #F8FAFC;
-                    font-size: 14px;
+                    font-size: 24px;
                 }
             }
         }
-        
+
         VerticalLayout {
-            spacing: 4px;
-            padding: 8px;
-            
+            spacing: 12px;
+            padding: 20px;
+
             Text {
                 text: "Enable Skills:";
                 color: #64748B;
-                font-size: 10px;
+                font-size: 16px;
             }
-            
+
             for s in ["Shell", "File", "Memory", "Browser", "Screenshot"]: Rectangle {
-                min-height: 24px;
+                min-height: 50px;
                 background: #1E293B;
-                border-radius: 4px;
-                padding: 4px;
+                border-radius: 8px;
+                padding: 12px;
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: 16px;
                     Text {
                         text: "[+]";
                         color: #22C55E;
-                        font-size: 10px;
+                        font-size: 16px;
                     }
                     Text {
                         text: s;
                         color: #F8FAFC;
-                        font-size: 11px;
+                        font-size: 18px;
                     }
                 }
             }
@@ -573,8 +573,8 @@ export component SkillOverlay inherits Rectangle {
 }
 
 export component MainWindow inherits Window {
-    width: 320px;
-    height: 240px;
+    width: 800px;
+    height: 600px;
     background: #0F172A;
     
     in property <string> status-text: "Ready";
@@ -611,13 +611,13 @@ export component MainWindow inherits Window {
             connected: root.is-connected;
             wifi-signal: root.wifi-signal;
             has-notification: root.has-notification;
-            height: 28px;
+            height: 60px;
             clicked => { root.open-menu(); }
         }
         
         MessageList {
             messages: root.messages;
-            height: 150px;
+            height: 420px;
         }
         
         QuickActionBar {
@@ -625,13 +625,13 @@ export component MainWindow inherits Window {
             clicked-files => { root.open-llm(); }
             clicked-browser => { root.open-skill(); }
             clicked-settings => { root.open-menu(); }
-            height: 24px;
+            height: 50px;
         }
         
         InputBar {
             text: input-text;
             on-send(text) => { root.send-message(text); }
-            height: 32px;
+            height: 70px;
         }
     }
     
