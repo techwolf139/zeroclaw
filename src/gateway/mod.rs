@@ -360,6 +360,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config, no_pairing: bool
         .route("/v1/tools/execute", post(handle_v1_tools_execute))
         .route("/v1/channels", get(handle_v1_channels_list))
         .route("/v1/channels/{name}/send", post(handle_v1_channels_send))
+        .route("/swagger-ui/{*:path}", get(serve_swagger_ui))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TimeoutLayer::with_status_code(
@@ -387,6 +388,22 @@ async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
     Json(body)
 }
 
+async fn serve_swagger_ui(
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let path = path.trim_start_matches('/');
+    let content = match path {
+        "" | "index.html" => include_str!("../swagger-ui/index.html"),
+        _ => {
+            return (StatusCode::NOT_FOUND, "");
+        }
+    };
+
+    (StatusCode::OK, content)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE API V1 HANDLERS
 // ══════════════════════════════════════════════════════════════════════════════
 // SERVICE API V1 HANDLERS
 // ══════════════════════════════════════════════════════════════════════════════

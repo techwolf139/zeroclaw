@@ -119,6 +119,10 @@ tower = { version = "0.5", default-features = false }
 tower-http = { version = "0.6", default-features = false, features = ["limit", "timeout"] }
 http-body-util = "0.1"
 
+# OpenAPI / Swagger UI
+utoipa = { version = "2", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "6", features = ["axum"] }
+
 # OpenTelemetry — OTLP trace + metrics export
 opentelemetry = { version = "0.31", default-features = false, features = ["trace", "metrics"] }
 opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "metrics"] }
