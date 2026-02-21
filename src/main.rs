@@ -158,6 +158,10 @@ enum Commands {
         /// Host to bind to; defaults to config gateway.host
         #[arg(long)]
         host: Option<String>,
+
+        /// Disable pairing requirement (for development)
+        #[arg(long)]
+        no_pairing: bool,
     },
 
     /// Start long-running autonomous runtime (gateway + channels + heartbeat + scheduler)
@@ -553,7 +557,11 @@ async fn main() -> Result<()> {
             .await
             .map(|_| ()),
 
-        Commands::Gateway { port, host } => {
+        Commands::Gateway {
+            port,
+            host,
+            no_pairing,
+        } => {
             let port = port.unwrap_or(config.gateway.port);
             let host = host.unwrap_or_else(|| config.gateway.host.clone());
             if port == 0 {
@@ -561,7 +569,7 @@ async fn main() -> Result<()> {
             } else {
                 info!("🚀 Starting ZeroClaw Gateway on {host}:{port}");
             }
-            gateway::run_gateway(&host, port, config).await
+            gateway::run_gateway(&host, port, config, no_pairing).await
         }
 
         Commands::Daemon { port, host } => {

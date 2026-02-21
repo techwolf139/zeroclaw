@@ -189,7 +189,7 @@ pub struct AppState {
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
 #[allow(clippy::too_many_lines)]
-pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
+pub async fn run_gateway(host: &str, port: u16, config: Config, no_pairing: bool) -> Result<()> {
     // ── Security: refuse public bind without tunnel or explicit opt-in ──
     if is_public_bind(host) && config.tunnel.provider == "none" && !config.gateway.allow_public_bind
     {
@@ -262,8 +262,13 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .map(Arc::from);
 
     // ── Pairing guard ──────────────────────────────────────
+    let require_pairing = if no_pairing {
+        false
+    } else {
+        config.gateway.require_pairing
+    };
     let pairing = Arc::new(PairingGuard::new(
-        config.gateway.require_pairing,
+        require_pairing,
         &config.gateway.paired_tokens,
     ));
     let rate_limiter = Arc::new(GatewayRateLimiter::new(
