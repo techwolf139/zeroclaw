@@ -3,6 +3,10 @@ slint::include_modules!();
 use slint::VecModel;
 use std::rc::Rc;
 
+// ============================================================================
+// API Functions
+// ============================================================================
+
 fn call_chat_api(server_url: &str, message: &str) -> Result<String, String> {
     let client = reqwest::blocking::Client::new();
     let url = format!("{}/v1/chat", server_url);
@@ -252,9 +256,163 @@ fn main() {
     });
 
     println!("ZeroClaw UI Demo started!");
-    println!("Window: 320x240 pixels");
+    println!("Window: 800x600 pixels");
     println!("Status: Connected");
     println!("Click [S] for settings, Send or Enter to test");
 
     app.run().unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+
+    #[test]
+    fn test_call_chat_api_success() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/v1/chat")
+            .with_status(200)
+            .with_body(r#"{"response":"Hello from API"}"#)
+            .create();
+
+        let result = call_chat_api(&server.url(), "Hello");
+
+        mock.assert();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello from API");
+    }
+
+    #[test]
+    fn test_call_chat_api_empty_message() {
+        let result = call_chat_api("http://localhost:8080", "");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_call_chat_api_server_error() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("POST", "/v1/chat")
+            .with_status(500)
+            .with_body("Internal Server Error")
+            .create();
+
+        let result = call_chat_api(&server.url(), "Hello");
+
+        mock.assert();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("500"));
+    }
+
+    #[test]
+    fn test_get_memories_success() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/v1/memories")
+            .with_status(200)
+            .with_body(r#"{"memories":[{"content":"Memory 1"},{"content":"Memory 2"}]}"#)
+            .create();
+
+        let result = get_memories(&server.url());
+
+        mock.assert();
+        assert!(result.is_ok());
+        let memories = result.unwrap();
+        assert_eq!(memories.len(), 2);
+        assert_eq!(memories[0], "Memory 1");
+        assert_eq!(memories[1], "Memory 2");
+    }
+
+    #[test]
+    fn test_get_memories_empty() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/v1/memories")
+            .with_status(200)
+            .with_body(r#"{"memories":[]}"#)
+            .create();
+
+        let result = get_memories(&server.url());
+
+        mock.assert();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_get_memories_server_error() {
+        let mut server = Server::new();
+        let mock = server.mock("GET", "/v1/memories").with_status(404).create();
+
+        let result = get_memories(&server.url());
+
+        mock.assert();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_models_success() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/v1/models")
+            .with_status(200)
+            .with_body(r#"{"models":[{"id":"claude-3"},{"id":"gpt-4"}]}"#)
+            .create();
+
+        let result = get_models(&server.url());
+
+        mock.assert();
+        assert!(result.is_ok());
+        let models = result.unwrap();
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0], "claude-3");
+        assert_eq!(models[1], "gpt-4");
+    }
+
+    #[test]
+    fn test_get_models_empty() {
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/v1/models")
+            .with_status(200)
+            .with_body(r#"{"models":[]}"#)
+            .create();
+
+        let result = get_models(&server.url());
+
+        mock.assert();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_get_models_server_error() {
+        let mut server = Server::new();
+        let mock = server.mock("GET", "/v1/models").with_status(503).create();
+
+        let result = get_models(&server.url());
+
+        mock.assert();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_call_chat_api_connection_refused() {
+        let result = call_chat_api("http://localhost:99999", "Hello");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_memories_connection_refused() {
+        let result = get_memories("http://localhost:99999");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_models_connection_refused() {
+        let result = get_models("http://localhost:99999");
+        assert!(result.is_err());
+    }
 }

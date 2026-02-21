@@ -7,7 +7,7 @@
 //! - Request timeouts (30s) to prevent slow-loris attacks
 //! - Header sanitization (handled by axum/hyper)
 
-use crate::channels::{Channel, WhatsAppChannel};
+use crate::channels::{Channel, SendMessage, WhatsAppChannel};
 use crate::config::Config;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::providers::{self, Provider};
@@ -208,6 +208,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     let provider: Arc<dyn Provider> = Arc::from(providers::create_resilient_provider(
         config.default_provider.as_deref().unwrap_or("openrouter"),
         config.api_key.as_deref(),
+        config.api_url.as_deref(),
         &config.reliability,
     )?);
     let model = config
@@ -490,7 +491,11 @@ async fn handle_v1_memories_create(
         "conversation" => MemoryCategory::Conversation,
         _ => MemoryCategory::Custom(req.category.clone()),
     };
-    if let Err(e) = state.mem.store(&req.key, &req.content, category, None).await {
+    if let Err(e) = state
+        .mem
+        .store(&req.key, &req.content, category, None)
+        .await
+    {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -841,7 +846,9 @@ async fn handle_v1_channels_send(
         }
         _ => (
             StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": format!("Channel '{}' not found or not supported via API", channel_name)})),
+            Json(
+                serde_json::json!({"error": format!("Channel '{}' not found or not supported via API", channel_name)}),
+            ),
         ),
     }
 }
@@ -852,7 +859,10 @@ async fn handle_v1_channels_list(State(state): State<AppState>) -> impl IntoResp
     if state.whatsapp.is_some() {
         channels.push("whatsapp".to_string());
     }
-    (StatusCode::OK, Json(serde_json::json!({"channels": channels})))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"channels": channels})),
+    )
 }
 
 /// POST /pair — exchange one-time code for bearer token
@@ -989,7 +999,7 @@ async fn handle_webhook(
         let key = webhook_memory_key();
         let _ = state
             .mem
-            .store(&key, message, MemoryCategory::Conversation)
+            .store(&key, message, MemoryCategory::Conversation, None)
             .await;
     }
 
@@ -1142,7 +1152,7 @@ async fn handle_whatsapp_message(
             let key = whatsapp_memory_key(msg);
             let _ = state
                 .mem
-                .store(&key, &msg.content, MemoryCategory::Conversation)
+                .store(&key, &msg.content, MemoryCategory::Conversation, None)
                 .await;
         }
 
@@ -1154,18 +1164,18 @@ async fn handle_whatsapp_message(
         {
             Ok(response) => {
                 // Send reply via WhatsApp
-                if let Err(e) = wa.send(&response, &msg.sender).await {
+                let send_msg = SendMessage::new(&response, &msg.sender);
+                if let Err(e) = wa.send(&send_msg).await {
                     tracing::error!("Failed to send WhatsApp reply: {e}");
                 }
             }
             Err(e) => {
                 tracing::error!("LLM error for WhatsApp message: {e:#}");
-                let _ = wa
-                    .send(
-                        "Sorry, I couldn't process your message right now.",
-                        &msg.sender,
-                    )
-                    .await;
+                let send_msg = SendMessage::new(
+                    "Sorry, I couldn't process your message right now.",
+                    &msg.sender,
+                );
+                let _ = wa.send(&send_msg).await;
             }
         }
     }
@@ -1661,7 +1671,8 @@ mod tests {
         assert_eq!(provider_impl.calls.load(Ordering::SeqCst), 1);
     }
 
->>>>>>> f21311b (fix: resolve merge conflicts in gateway (service_startup, SendMessage, Memory trait))
+    // ══════════════════════════════════════════════════════════
+    // WhatsApp Signature Verification Tests (CWE-345 Prevention)
     // ══════════════════════════════════════════════════════════
     // WhatsApp Signature Verification Tests (CWE-345 Prevention)
     // ══════════════════════════════════════════════════════════

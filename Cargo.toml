@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/robot-kit"]
+members = [".", "crates/robot-kit", "zeroclaw-ui-demo"]
 resolver = "2"
 
 [package]
