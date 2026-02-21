@@ -1,19 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ZeroClaw API</title>
-    <link rel="stylesheet" type="text/css" href="swagger.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeroClaw Gateway API</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css">
+    <style>
+        body { margin: 0; padding: 0; }
+        .swagger-ui .topbar { display: none; }
+    </style>
 </head>
 <body>
-    <h1>ZeroClaw Gateway API</h1>
-    <p>API Documentation</p>
-    <ul>
-        <li><a href="/v1/chat">POST /v1/chat</a> - Send chat message</li>
-        <li><a href="/v1/models">GET /v1/models</a> - List models</li>
-        <li><a href="/v1/memories">GET /v1/memories</a> - List memories</li>
-        <li><a href="/v1/stats">GET /v1/stats</a> - Get stats</li>
-        <li><a href="/v1/channels">GET /v1/channels</a> - List channels</li>
-        <li><a href="/health">GET /health</a> - Health check</li>
-    </ul>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '/api-docs/openapi.json',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                layout: 'StandaloneLayout',
+                docExpansion: 'list',
+                filter: true,
+                showExtensions: true,
+                showCommonExtensions: true,
+            });
+            window.ui = ui;
+        };
+    </script>
 </body>
 </html>

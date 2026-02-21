@@ -22,12 +22,14 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
+use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 /// Maximum request body size (64KB) — prevents memory exhaustion
@@ -360,6 +362,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config, no_pairing: bool
         .route("/v1/tools/execute", post(handle_v1_tools_execute))
         .route("/v1/channels", get(handle_v1_channels_list))
         .route("/v1/channels/{name}/send", post(handle_v1_channels_send))
+        .route("/api-docs/openapi.json", get(serve_openapi_json))
         .route("/swagger-ui", get(swagger_ui_index))
         .route("/swagger-ui/", get(swagger_ui_index))
         .route("/swagger-ui/{*path}", get(serve_swagger_ui))
@@ -380,6 +383,14 @@ pub async fn run_gateway(host: &str, port: u16, config: Config, no_pairing: bool
 // AXUM HANDLERS
 // ══════════════════════════════════════════════════════════════════════════════
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Health check successful", body = HealthResponse)
+    )
+)]
 /// GET /health — always public (no secrets leaked)
 async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
     let body = serde_json::json!({
@@ -406,6 +417,11 @@ async fn serve_swagger_ui(
 
 async fn swagger_ui_index() -> impl IntoResponse {
     (StatusCode::OK, include_str!("../swagger-ui/index.html"))
+}
+
+async fn serve_openapi_json() -> impl IntoResponse {
+    let json = serde_json::to_string_pretty(&ApiDoc::openapi()).unwrap();
+    (StatusCode::OK, json)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -452,6 +468,14 @@ impl From<crate::memory::MemoryEntry> for MemoryResponse {
 }
 
 /// GET /v1/stats — service statistics
+#[utoipa::path(
+    get,
+    path = "/v1/stats",
+    tag = "Stats",
+    responses(
+        (status = 200, description = "Service statistics", body = StatsResponse)
+    )
+)]
 async fn handle_v1_stats(State(state): State<AppState>) -> impl IntoResponse {
     let uptime = state.service_startup.elapsed().as_secs();
     let body = serde_json::json!({
@@ -462,6 +486,14 @@ async fn handle_v1_stats(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// GET /v1/models — list available models
+#[utoipa::path(
+    get,
+    path = "/v1/models",
+    tag = "Models",
+    responses(
+        (status = 200, description = "List available models", body = ModelListResponse)
+    )
+)]
 async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
     let models = vec![
         state.model.clone(),
@@ -475,6 +507,19 @@ async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// GET /v1/memories — list memories
+#[utoipa::path(
+    get,
+    path = "/v1/memories",
+    tag = "Memory",
+    params(
+        ("query" = Option<String>, Query, description = "Search query for memories"),
+        ("limit" = Option<usize>, Query, description = "Maximum number of results")
+    ),
+    responses(
+        (status = 200, description = "List of memories", body = MemoryListResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 async fn handle_v1_memories_list(
     State(state): State<AppState>,
     Query(query): Query<MemoryQuery>,
@@ -507,6 +552,17 @@ async fn handle_v1_memories_list(
 }
 
 /// POST /v1/memories — create memory
+#[utoipa::path(
+    post,
+    path = "/v1/memories",
+    tag = "Memory",
+    request_body = MemoryCreateRequest,
+    responses(
+        (status = 201, description = "Memory created successfully"),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 async fn handle_v1_memories_create(
     State(state): State<AppState>,
     Json(req): Json<MemoryCreateRequest>,
@@ -545,6 +601,18 @@ async fn handle_v1_memories_create(
 }
 
 /// GET /v1/memories/:key — get memory
+#[utoipa::path(
+    get,
+    path = "/v1/memories/{key}",
+    tag = "Memory",
+    params(
+        ("key" = String, Path, description = "Memory key")
+    ),
+    responses(
+        (status = 200, description = "Memory entry found", body = MemoryEntry),
+        (status = 404, description = "Memory not found", body = ErrorResponse)
+    )
+)]
 async fn handle_v1_memory_get(
     State(state): State<AppState>,
     Path(key): Path<String>,
@@ -567,6 +635,19 @@ async fn handle_v1_memory_get(
 }
 
 /// DELETE /v1/memories/:key — delete memory
+#[utoipa::path(
+    delete,
+    path = "/v1/memories/{key}",
+    tag = "Memory",
+    params(
+        ("key" = String, Path, description = "Memory key to delete")
+    ),
+    responses(
+        (status = 200, description = "Memory deleted successfully", body = MemoryDeleteResponse),
+        (status = 404, description = "Memory not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 async fn handle_v1_memory_delete(
     State(state): State<AppState>,
     Path(key): Path<String>,
@@ -602,6 +683,20 @@ struct ChatResponse {
 }
 
 /// POST /v1/chat — chat with AI
+#[utoipa::path(
+    post,
+    path = "/v1/chat",
+    tag = "Chat",
+    request_body = ChatRequest,
+    responses(
+        (status = 200, description = "Chat response", body = ChatResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 async fn handle_v1_chat(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -655,6 +750,21 @@ struct ToolExecuteResponse {
 }
 
 /// POST /v1/tools/execute — execute a tool
+#[utoipa::path(
+    post,
+    path = "/v1/tools/execute",
+    tag = "Tools",
+    request_body = ToolExecuteRequest,
+    responses(
+        (status = 200, description = "Tool executed successfully", body = ToolExecuteResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 async fn handle_v1_tools_execute(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -827,6 +937,25 @@ struct ChannelSendResponse {
 }
 
 /// POST /v1/channels/:name/send — send message via channel
+#[utoipa::path(
+    post,
+    path = "/v1/channels/{name}/send",
+    tag = "Channels",
+    params(
+        ("name" = String, Path, description = "Channel name (e.g., cli, telegram, discord)")
+    ),
+    request_body = ChannelSendRequest,
+    responses(
+        (status = 200, description = "Message sent successfully"),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "Channel not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 async fn handle_v1_channels_send(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -880,6 +1009,14 @@ async fn handle_v1_channels_send(
 }
 
 /// GET /v1/channels — list available channels
+#[utoipa::path(
+    get,
+    path = "/v1/channels",
+    tag = "Channels",
+    responses(
+        (status = 200, description = "List of available channels", body = ChannelListResponse)
+    )
+)]
 async fn handle_v1_channels_list(State(state): State<AppState>) -> impl IntoResponse {
     let mut channels = vec!["cli".to_string()];
     if state.whatsapp.is_some() {
@@ -892,6 +1029,17 @@ async fn handle_v1_channels_list(State(state): State<AppState>) -> impl IntoResp
 }
 
 /// POST /pair — exchange one-time code for bearer token
+#[utoipa::path(
+    post,
+    path = "/pair",
+    tag = "Authentication",
+    request_body = PairRequest,
+    responses(
+        (status = 200, description = "Pairing successful", body = PairResponse),
+        (status = 400, description = "Invalid pairing code", body = PairResponse),
+        (status = 429, description = "Too many requests", body = ErrorResponse)
+    )
+)]
 async fn handle_pair(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let client_key = client_key_from_headers(&headers);
     if !state.rate_limiter.allow_pair(&client_key) {
@@ -943,6 +1091,22 @@ pub struct WebhookBody {
 }
 
 /// POST /webhook — main webhook endpoint
+#[utoipa::path(
+    post,
+    path = "/webhook",
+    tag = "Webhooks",
+    request_body = WebhookBody,
+    responses(
+        (status = 200, description = "Webhook processed successfully", body = ChatResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 429, description = "Too many requests", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 async fn handle_webhook(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1061,6 +1225,21 @@ pub struct WhatsAppVerifyQuery {
 }
 
 /// GET /whatsapp — Meta webhook verification
+#[utoipa::path(
+    get,
+    path = "/whatsapp",
+    tag = "Webhooks",
+    params(
+        ("hub.mode" = Option<String>, Query, description = "Webhook mode (subscribe)"),
+        ("hub.verify_token" = Option<String>, Query, description = "Verification token"),
+        ("hub.challenge" = Option<String>, Query, description = "Challenge string")
+    ),
+    responses(
+        (status = 200, description = "Webhook verified successfully"),
+        (status = 403, description = "Verification failed", body = String),
+        (status = 404, description = "WhatsApp not configured", body = String)
+    )
+)]
 async fn handle_whatsapp_verify(
     State(state): State<AppState>,
     Query(params): Query<WhatsAppVerifyQuery>,
@@ -1114,6 +1293,18 @@ pub fn verify_whatsapp_signature(app_secret: &str, body: &[u8], signature_header
 }
 
 /// POST /whatsapp — incoming message webhook
+#[utoipa::path(
+    post,
+    path = "/whatsapp",
+    tag = "Webhooks",
+    responses(
+        (status = 200, description = "Message processed successfully"),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 403, description = "Invalid signature", body = ErrorResponse),
+        (status = 404, description = "WhatsApp not configured", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 async fn handle_whatsapp_message(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1890,3 +2081,7 @@ mod tests {
         ));
     }
 }
+
+#[derive(OpenApi)]
+#[openapi()]
+pub struct ApiDoc;
